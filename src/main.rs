@@ -3,6 +3,7 @@
 // (e.g. https://learn.microsoft.com/api/mcp), and writes responses to stdout.
 
 use anyhow::{Context, Result};
+use argh::FromArgs;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::io::{self, BufRead, BufReader};
@@ -11,16 +12,26 @@ use std::io::{self, BufRead, BufReader};
 // Structs for request/response
 // ----------------------------
 
+/// MCP Proxy Tool - Proxies MCP requests to remote HTTP-based MCP servers
+#[derive(FromArgs)]
+struct Args {
+    /// URL of the remote MCP server to proxy requests to
+    #[argh(option, short = 'u', default = "String::from(\"https://learn.microsoft.com/api/mcp\")")]
+    url: String,
+    
+    /// timeout in seconds for HTTP requests
+    #[argh(option, short = 't', default = "30")]
+    timeout: u64,
+    
+    /// enable verbose logging
+    #[argh(switch, short = 'v')]
+    verbose: bool,
+}
+
 #[derive(Serialize, Deserialize)]
 struct MCPRequest {
     method: String,
     params: serde_json::Value,
-}
-
-#[derive(Serialize)]
-struct MCPLog {
-    request: MCPRequest,
-    response: serde_json::Value,
 }
 
 // MCP JSON-RPC structures
@@ -40,15 +51,6 @@ struct JsonRpcResponse {
     result: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     error: Option<serde_json::Value>,
-}
-
-#[derive(Serialize)]
-struct InitializeResult {
-    #[serde(rename = "protocolVersion")]
-    protocol_version: String,
-    capabilities: serde_json::Value,
-    #[serde(rename = "serverInfo")]
-    server_info: serde_json::Value,
 }
 
 // ----------------------------
@@ -142,8 +144,18 @@ async fn proxy_mcp_request(client: &Client, base_url: &str, req: MCPRequest) -> 
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let base_url = "https://learn.microsoft.com/api/mcp";
-    let client = Client::new();
+    let args: Args = argh::from_env();
+    
+    if args.verbose {
+        eprintln!("[INFO] Starting MCP proxy tool");
+        eprintln!("[INFO] Target MCP server: {}", args.url);
+        eprintln!("[INFO] Timeout: {} seconds", args.timeout);
+    }
+    
+    let client = Client::builder()
+        .timeout(std::time::Duration::from_secs(args.timeout))
+        .build()
+        .context("Failed to create HTTP client")?;
     
     let stdin = io::stdin();
     let reader = BufReader::new(stdin);
@@ -154,6 +166,10 @@ async fn main() -> Result<()> {
         
         if line.is_empty() {
             continue;
+        }
+        
+        if args.verbose {
+            eprintln!("[DEBUG] Received request: {}", line);
         }
         
         // Parse the JSON-RPC request
@@ -168,6 +184,9 @@ async fn main() -> Result<()> {
         // Handle different MCP methods
         match request.method.as_str() {
             "initialize" => {
+                if args.verbose {
+                    eprintln!("[INFO] Handling initialize request");
+                }
                 // Handle MCP initialization
                 let response = JsonRpcResponse {
                     jsonrpc: "2.0".to_string(),
@@ -190,17 +209,23 @@ async fn main() -> Result<()> {
                 println!("{}", serde_json::to_string(&response)?);
             }
             "notifications/initialized" => {
+                if args.verbose {
+                    eprintln!("[INFO] Received initialized notification");
+                }
                 // This is a notification, no response needed
                 continue;
             }
             "tools/list" => {
+                if args.verbose {
+                    eprintln!("[INFO] Proxying tools/list request to {}", args.url);
+                }
                 // Get the tool list from the remote server
                 let mcp_req = MCPRequest {
                     method: "tools/list".to_string(),
                     params: serde_json::Value::Object(serde_json::Map::new()),
                 };
                 
-                match proxy_mcp_request(&client, base_url, mcp_req).await {
+                match proxy_mcp_request(&client, &args.url, mcp_req).await {
                     Ok(result) => {
                         // Extract the inner result from the Microsoft Learn server response
                         let tools_result = if let Some(inner_result) = result.get("result") {
@@ -218,6 +243,9 @@ async fn main() -> Result<()> {
                         println!("{}", serde_json::to_string(&response)?);
                     }
                     Err(e) => {
+                        if args.verbose {
+                            eprintln!("[ERROR] tools/list request failed: {}", e);
+                        }
                         let response = JsonRpcResponse {
                             jsonrpc: "2.0".to_string(),
                             id: request.id,
@@ -232,13 +260,16 @@ async fn main() -> Result<()> {
                 }
             }
             "tools/call" => {
+                if args.verbose {
+                    eprintln!("[INFO] Proxying tools/call request to {}", args.url);
+                }
                 // Proxy the tool call to the remote server
                 let mcp_req = MCPRequest {
                     method: "tools/call".to_string(),
                     params: request.params.unwrap_or_default(),
                 };
                 
-                match proxy_mcp_request(&client, base_url, mcp_req).await {
+                match proxy_mcp_request(&client, &args.url, mcp_req).await {
                     Ok(result) => {
                         // Extract the inner result from the Microsoft Learn server response
                         let call_result = if let Some(inner_result) = result.get("result") {
@@ -256,6 +287,9 @@ async fn main() -> Result<()> {
                         println!("{}", serde_json::to_string(&response)?);
                     }
                     Err(e) => {
+                        if args.verbose {
+                            eprintln!("[ERROR] tools/call request failed: {}", e);
+                        }
                         let response = JsonRpcResponse {
                             jsonrpc: "2.0".to_string(),
                             id: request.id,
@@ -270,6 +304,9 @@ async fn main() -> Result<()> {
                 }
             }
             _ => {
+                if args.verbose {
+                    eprintln!("[WARN] Unknown method: {}", request.method);
+                }
                 // Unknown method
                 let response = JsonRpcResponse {
                     jsonrpc: "2.0".to_string(),

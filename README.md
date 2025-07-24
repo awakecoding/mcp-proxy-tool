@@ -11,7 +11,10 @@ This tool acts as a bridge between local MCP clients and remote HTTP-based MCP s
 - JSON-RPC 2.0 compliant communication
 - Server-Sent Events (SSE) response handling
 - Unicode escape sequence decoding
-- Pretty-printed JSON output
+- Configurable MCP server endpoints
+- Lightweight command-line interface (using `argh`)
+- Verbose logging for debugging
+- Configurable HTTP timeouts
 - Error handling and logging
 
 ## Installation
@@ -33,14 +36,68 @@ The compiled binary will be available at `target/release/mcp-proxy-tool`.
 
 ## Usage
 
+### Command-line Options
+
+```bash
+mcp-proxy-tool [OPTIONS]
+
+Options:
+  -u, --url <URL>          URL of the remote MCP server to proxy requests to 
+                          [default: https://learn.microsoft.com/api/mcp]
+  -t, --timeout <TIMEOUT>  Timeout in seconds for HTTP requests [default: 30]
+  -v, --verbose            Enable verbose logging
+  -h, --help               Print help
+  -V, --version            Print version
+```
+
 ### Basic Usage
 
 ```bash
-# List available documentation tools
+# Use default Microsoft Learn MCP server
 echo '{"method": "tools/list", "params": {}}' | ./target/debug/mcp-proxy-tool
+
+# Use custom MCP server with verbose logging
+echo '{"method": "tools/list", "params": {}}' | ./target/debug/mcp-proxy-tool --url "https://your-server.com/mcp" --verbose
+
+# Set custom timeout
+./target/debug/mcp-proxy-tool --timeout 60 --verbose
 
 # Search Microsoft Learn documentation
 echo '{"method": "tools/call", "params": {"name": "microsoft_docs_search", "arguments": {"question": "Azure Functions"}}}' | ./target/debug/mcp-proxy-tool
+```
+
+### Configuration Examples
+
+#### VS Code MCP Configuration
+
+You can configure multiple proxy instances in your `.vscode/mcp.json`:
+
+```json
+{
+  "servers": {
+    "microsoft-learn-proxy": {
+      "type": "stdio",
+      "command": "/path/to/mcp-proxy-tool",
+      "args": ["--url", "https://learn.microsoft.com/api/mcp", "--verbose"]
+    },
+    "custom-mcp-proxy": {
+      "type": "stdio", 
+      "command": "/path/to/mcp-proxy-tool",
+      "args": ["--url", "https://your-custom-server.com/mcp", "--timeout", "60"]
+    }
+  }
+}
+```
+
+#### MCP Inspector Usage
+
+```bash
+# Start MCP Inspector and connect to your proxy
+mcp-inspector
+
+# Then in the web interface, add a server:
+# - Command: /path/to/mcp-proxy-tool
+# - Args: --url https://your-server.com/mcp --verbose
 ```
 
 ### Sample Input/Output
