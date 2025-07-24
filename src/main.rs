@@ -5,7 +5,7 @@
 use anyhow::{Context, Result};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::io::{self, Read};
+use std::io::{self, BufRead, BufReader};
 
 // ----------------------------
 // Structs for request/response
@@ -24,27 +24,46 @@ struct MCPLog {
 }
 
 // MCP JSON-RPC structures
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 struct JsonRpcRequest {
     jsonrpc: String,
-    id: i32,
+    id: Option<i32>,
     method: String,
-    params: serde_json::Value,
+    params: Option<serde_json::Value>,
+}
+
+#[derive(Serialize)]
+struct JsonRpcResponse {
+    jsonrpc: String,
+    id: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    result: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<serde_json::Value>,
+}
+
+#[derive(Serialize)]
+struct InitializeResult {
+    #[serde(rename = "protocolVersion")]
+    protocol_version: String,
+    capabilities: serde_json::Value,
+    #[serde(rename = "serverInfo")]
+    server_info: serde_json::Value,
 }
 
 // ----------------------------
 // MCP Client Logic
 // ----------------------------
 
-async fn proxy_mcp_request(client: &Client, base_url: &str, req: MCPRequest) -> Result<MCPLog> {
+async fn proxy_mcp_request(client: &Client, base_url: &str, req: MCPRequest) -> Result<serde_json::Value> {
     let url = base_url.trim_end_matches('/');
     
     // Create JSON-RPC request
     let rpc_request = JsonRpcRequest {
         jsonrpc: "2.0".to_string(),
-        id: 1,
+        id: Some(1),
         method: req.method.clone(),
-        params: req.params.clone(),
+        params: Some(req.params.clone()),
     };
 
     let res = client
@@ -114,10 +133,7 @@ async fn proxy_mcp_request(client: &Client, base_url: &str, req: MCPRequest) -> 
         eprintln!("[!] Response body: {}", body_text);
     }
 
-    Ok(MCPLog {
-        request: req,
-        response: json_response,
-    })
+    Ok(json_response)
 }
 
 // ----------------------------
@@ -126,30 +142,148 @@ async fn proxy_mcp_request(client: &Client, base_url: &str, req: MCPRequest) -> 
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let base_url = "https://learn.microsoft.com/api/mcp"; // configurable later
+    let base_url = "https://learn.microsoft.com/api/mcp";
     let client = Client::new();
-
-    let mut buffer = String::new();
-    io::stdin()
-        .read_to_string(&mut buffer)
-        .context("Failed to read from stdin")?;
-
-    let req: MCPRequest = match serde_json::from_str(&buffer) {
-        Ok(r) => r,
-        Err(e) => {
-            eprintln!("[!] Failed to parse input JSON: {}", e);
-            std::process::exit(1);
+    
+    let stdin = io::stdin();
+    let reader = BufReader::new(stdin);
+    
+    for line in reader.lines() {
+        let line = line.context("Failed to read line from stdin")?;
+        let line = line.trim();
+        
+        if line.is_empty() {
+            continue;
         }
-    };
-
-    match proxy_mcp_request(&client, base_url, req).await {
-        Ok(log) => {
-            println!("{}", serde_json::to_string_pretty(&log)?);
-        }
-        Err(e) => {
-            eprintln!("[!] Error proxying request: {:?}", e);
+        
+        // Parse the JSON-RPC request
+        let request: JsonRpcRequest = match serde_json::from_str(&line) {
+            Ok(req) => req,
+            Err(e) => {
+                eprintln!("[!] Failed to parse JSON-RPC request: {}", e);
+                continue;
+            }
+        };
+        
+        // Handle different MCP methods
+        match request.method.as_str() {
+            "initialize" => {
+                // Handle MCP initialization
+                let response = JsonRpcResponse {
+                    jsonrpc: "2.0".to_string(),
+                    id: request.id,
+                    result: Some(serde_json::json!({
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {
+                            "tools": {
+                                "listChanged": true
+                            },
+                            "logging": {}
+                        },
+                        "serverInfo": {
+                            "name": "mcp-proxy-tool",
+                            "version": "1.0.0"
+                        }
+                    })),
+                    error: None,
+                };
+                println!("{}", serde_json::to_string(&response)?);
+            }
+            "notifications/initialized" => {
+                // This is a notification, no response needed
+                continue;
+            }
+            "tools/list" => {
+                // Get the tool list from the remote server
+                let mcp_req = MCPRequest {
+                    method: "tools/list".to_string(),
+                    params: serde_json::Value::Object(serde_json::Map::new()),
+                };
+                
+                match proxy_mcp_request(&client, base_url, mcp_req).await {
+                    Ok(result) => {
+                        // Extract the inner result from the Microsoft Learn server response
+                        let tools_result = if let Some(inner_result) = result.get("result") {
+                            inner_result.clone()
+                        } else {
+                            result
+                        };
+                        
+                        let response = JsonRpcResponse {
+                            jsonrpc: "2.0".to_string(),
+                            id: request.id,
+                            result: Some(tools_result),
+                            error: None,
+                        };
+                        println!("{}", serde_json::to_string(&response)?);
+                    }
+                    Err(e) => {
+                        let response = JsonRpcResponse {
+                            jsonrpc: "2.0".to_string(),
+                            id: request.id,
+                            result: None,
+                            error: Some(serde_json::json!({
+                                "code": -32603,
+                                "message": format!("Internal error: {}", e)
+                            })),
+                        };
+                        println!("{}", serde_json::to_string(&response)?);
+                    }
+                }
+            }
+            "tools/call" => {
+                // Proxy the tool call to the remote server
+                let mcp_req = MCPRequest {
+                    method: "tools/call".to_string(),
+                    params: request.params.unwrap_or_default(),
+                };
+                
+                match proxy_mcp_request(&client, base_url, mcp_req).await {
+                    Ok(result) => {
+                        // Extract the inner result from the Microsoft Learn server response
+                        let call_result = if let Some(inner_result) = result.get("result") {
+                            inner_result.clone()
+                        } else {
+                            result
+                        };
+                        
+                        let response = JsonRpcResponse {
+                            jsonrpc: "2.0".to_string(),
+                            id: request.id,
+                            result: Some(call_result),
+                            error: None,
+                        };
+                        println!("{}", serde_json::to_string(&response)?);
+                    }
+                    Err(e) => {
+                        let response = JsonRpcResponse {
+                            jsonrpc: "2.0".to_string(),
+                            id: request.id,
+                            result: None,
+                            error: Some(serde_json::json!({
+                                "code": -32603,
+                                "message": format!("Internal error: {}", e)
+                            })),
+                        };
+                        println!("{}", serde_json::to_string(&response)?);
+                    }
+                }
+            }
+            _ => {
+                // Unknown method
+                let response = JsonRpcResponse {
+                    jsonrpc: "2.0".to_string(),
+                    id: request.id,
+                    result: None,
+                    error: Some(serde_json::json!({
+                        "code": -32601,
+                        "message": format!("Method not found: {}", request.method)
+                    })),
+                };
+                println!("{}", serde_json::to_string(&response)?);
+            }
         }
     }
-
+    
     Ok(())
 }
