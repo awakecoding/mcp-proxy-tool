@@ -10,6 +10,8 @@ use std::io::{self, BufRead, BufReader};
 use std::process::Stdio;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader as TokioBufReader};
 use tokio::process::{Child, Command as TokioCommand};
+
+#[cfg(unix)]
 use tokio::fs::OpenOptions;
 
 #[cfg(unix)]
@@ -193,7 +195,6 @@ impl NamedPipeMcpClient {
             
             let mut client = ClientOptions::new()
                 .open(&pipe_name)
-                .await
                 .with_context(|| format!("Failed to connect to Windows named pipe: {}", pipe_name))?;
             
             // Send request
