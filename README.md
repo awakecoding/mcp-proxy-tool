@@ -1,21 +1,17 @@
 # MCP Proxy Tool
 
-A command-line proxy tool that reads MCP (Model Context Protocol) tool calls from stdin, forwards them to an HTTP-based MCP server, and writes the responses to stdout.
-
-## Overview
-
-This tool acts as a bridge between local MCP clients and remote HTTP-based MCP servers. It accepts JSON-formatted MCP requests via stdin, converts them to JSON-RPC format, sends them to a configured MCP server endpoint, and returns the formatted response.
+A high-performance MCP (Model Context Protocol) proxy tool written in Rust that enables connections to both HTTP-based and STDIO-based MCP servers. This tool acts as a bridge, converting between different MCP transport protocols and making MCP servers accessible through a unified interface.
 
 ## Features
 
-- JSON-RPC 2.0 compliant communication
-- Server-Sent Events (SSE) response handling
-- Unicode escape sequence decoding
-- Configurable MCP server endpoints
-- Lightweight command-line interface (using `argh`)
-- Verbose logging for debugging
-- Configurable HTTP timeouts
-- Error handling and logging
+- **Dual Transport Support**: Connect to both HTTP and STDIO-based MCP servers
+- **HTTP Transport**: Proxy requests to remote HTTP-based MCP servers (like Microsoft Learn)
+- **STDIO Transport**: Launch and communicate with executable MCP servers over stdin/stdout
+- **JSON-RPC 2.0 Compatible**: Full support for MCP protocol specifications
+- **High Performance**: Built in Rust with async/await for optimal performance
+- **Configurable Timeouts**: Adjustable timeout settings for HTTP requests
+- **Verbose Logging**: Optional detailed logging for debugging and monitoring
+- **Lightweight**: Small binary size using argh for CLI parsing (5.8MB release build)
 
 ## Installation
 
@@ -36,18 +32,45 @@ The compiled binary will be available at `target/release/mcp-proxy-tool`.
 
 ## Usage
 
-### Command-line Options
+### Command Line Options
 
-```bash
-mcp-proxy-tool [OPTIONS]
+```
+Usage: mcp-proxy-tool [-u <url>] [-c <command>] [-a <args>] [-t <timeout>] [-v]
 
 Options:
-  -u, --url <URL>          URL of the remote MCP server to proxy requests to 
-                          [default: https://learn.microsoft.com/api/mcp]
-  -t, --timeout <TIMEOUT>  Timeout in seconds for HTTP requests [default: 30]
-  -v, --verbose            Enable verbose logging
-  -h, --help               Print help
-  -V, --version            Print version
+  -u, --url         URL of the remote HTTP-based MCP server to proxy requests to
+  -c, --command     command to execute for STDIO-based MCP server
+  -a, --args        arguments for the STDIO-based MCP server command
+  -t, --timeout     timeout in seconds for HTTP requests (ignored for STDIO)
+  -v, --verbose     enable verbose logging
+  --help, help      display usage information
+```
+
+### HTTP Transport (Remote MCP Server)
+
+Connect to a remote HTTP-based MCP server:
+
+```bash
+# Connect to Microsoft Learn MCP server
+./target/release/mcp-proxy-tool -u https://learn.microsoft.com/api/mcp
+
+# With verbose logging and custom timeout
+./target/release/mcp-proxy-tool -u https://learn.microsoft.com/api/mcp -v -t 60
+```
+
+### STDIO Transport (Local Executable)
+
+Launch and connect to a local executable MCP server:
+
+```bash
+# Connect to a Python MCP server
+./target/release/mcp-proxy-tool -c python3 -a mcp_server.py
+
+# Connect to a Node.js MCP server with arguments
+./target/release/mcp-proxy-tool -c node -a "server.js --config config.json"
+
+# With verbose logging
+./target/release/mcp-proxy-tool -c python3 -a mcp_server.py -v
 ```
 
 ### Basic Usage

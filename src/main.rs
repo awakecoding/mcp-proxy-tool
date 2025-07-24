@@ -7,25 +7,42 @@ use argh::FromArgs;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::io::{self, BufRead, BufReader};
+use std::process::Stdio;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader as TokioBufReader};
+use tokio::process::{Child, Command as TokioCommand};
 
 // ----------------------------
 // Structs for request/response
 // ----------------------------
 
-/// MCP Proxy Tool - Proxies MCP requests to remote HTTP-based MCP servers
+/// MCP Proxy Tool - Proxies MCP requests to remote HTTP-based or STDIO-based MCP servers
 #[derive(FromArgs)]
 struct Args {
-    /// URL of the remote MCP server to proxy requests to
-    #[argh(option, short = 'u', default = "String::from(\"https://learn.microsoft.com/api/mcp\")")]
-    url: String,
+    /// URL of the remote HTTP-based MCP server to proxy requests to
+    #[argh(option, short = 'u')]
+    url: Option<String>,
     
-    /// timeout in seconds for HTTP requests
+    /// command to execute for STDIO-based MCP server
+    #[argh(option, short = 'c')]
+    command: Option<String>,
+    
+    /// arguments for the STDIO-based MCP server command
+    #[argh(option, short = 'a')]
+    args: Option<String>,
+    
+    /// timeout in seconds for HTTP requests (ignored for STDIO)
     #[argh(option, short = 't', default = "30")]
     timeout: u64,
     
     /// enable verbose logging
     #[argh(switch, short = 'v')]
     verbose: bool,
+}
+
+#[derive(Debug, Clone)]
+enum TransportMode {
+    Http,
+    Stdio,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -57,7 +74,48 @@ struct JsonRpcResponse {
 // MCP Client Logic
 // ----------------------------
 
-async fn proxy_mcp_request(client: &Client, base_url: &str, req: MCPRequest) -> Result<serde_json::Value> {
+struct StdioMcpClient {
+    process: Child,
+    stdin: tokio::process::ChildStdin,
+    stdout: TokioBufReader<tokio::process::ChildStdout>,
+}
+
+impl StdioMcpClient {
+    async fn new(command: &str, args: &[String]) -> Result<Self> {
+        let mut cmd = TokioCommand::new(command);
+        cmd.args(args)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        
+        let mut process = cmd.spawn().context("Failed to spawn MCP server process")?;
+        
+        let stdin = process.stdin.take().context("Failed to get stdin")?;
+        let stdout = process.stdout.take().context("Failed to get stdout")?;
+        let stdout = TokioBufReader::new(stdout);
+        
+        Ok(StdioMcpClient {
+            process,
+            stdin,
+            stdout,
+        })
+    }
+    
+    async fn send_request(&mut self, request: &str) -> Result<String> {
+        // Send request
+        self.stdin.write_all(request.as_bytes()).await?;
+        self.stdin.write_all(b"\n").await?;
+        self.stdin.flush().await?;
+        
+        // Read response
+        let mut response = String::new();
+        self.stdout.read_line(&mut response).await?;
+        
+        Ok(response.trim().to_string())
+    }
+}
+
+async fn proxy_mcp_request_http(client: &Client, base_url: &str, req: MCPRequest) -> Result<serde_json::Value> {
     let url = base_url.trim_end_matches('/');
     
     // Create JSON-RPC request
@@ -138,6 +196,24 @@ async fn proxy_mcp_request(client: &Client, base_url: &str, req: MCPRequest) -> 
     Ok(json_response)
 }
 
+async fn proxy_mcp_request_stdio(stdio_client: &mut StdioMcpClient, req: MCPRequest) -> Result<serde_json::Value> {
+    // Create JSON-RPC request
+    let rpc_request = JsonRpcRequest {
+        jsonrpc: "2.0".to_string(),
+        id: Some(1),
+        method: req.method.clone(),
+        params: Some(req.params.clone()),
+    };
+    
+    let request_json = serde_json::to_string(&rpc_request)?;
+    let response_json = stdio_client.send_request(&request_json).await?;
+    
+    let json_response: serde_json::Value = serde_json::from_str(&response_json)
+        .with_context(|| format!("Failed to parse JSON response: {}", response_json))?;
+    
+    Ok(json_response)
+}
+
 // ----------------------------
 // Main loop (stdin/stdout)
 // ----------------------------
@@ -145,10 +221,31 @@ async fn proxy_mcp_request(client: &Client, base_url: &str, req: MCPRequest) -> 
 #[tokio::main]
 async fn main() -> Result<()> {
     let args: Args = argh::from_env();
-    
+
+    // Determine transport mode
+    let transport_mode = if args.url.is_some() {
+        TransportMode::Http
+    } else if args.command.is_some() {
+        TransportMode::Stdio
+    } else {
+        eprintln!("Error: Must specify either -u/--url for HTTP or -c/--command for STDIO transport");
+        std::process::exit(1);
+    };
+
     if args.verbose {
         eprintln!("[INFO] Starting MCP proxy tool");
-        eprintln!("[INFO] Target MCP server: {}", args.url);
+        eprintln!("[INFO] Transport mode: {:?}", transport_mode);
+        match &transport_mode {
+            TransportMode::Http => {
+                eprintln!("[INFO] Target MCP server: {}", args.url.as_ref().unwrap());
+            }
+            TransportMode::Stdio => {
+                let cmd_args = args.args.as_deref().unwrap_or("");
+                eprintln!("[INFO] Target MCP command: {} {}", 
+                    args.command.as_ref().unwrap(),
+                    cmd_args);
+            }
+        }
         eprintln!("[INFO] Timeout: {} seconds", args.timeout);
     }
     
@@ -156,6 +253,20 @@ async fn main() -> Result<()> {
         .timeout(std::time::Duration::from_secs(args.timeout))
         .build()
         .context("Failed to create HTTP client")?;
+
+    // Initialize STDIO client if needed
+    let mut stdio_client = if let TransportMode::Stdio = transport_mode {
+        let command = args.command.as_ref().unwrap();
+        let cmd_args_str = args.args.as_deref().unwrap_or("");
+        let cmd_args: Vec<String> = if cmd_args_str.is_empty() {
+            Vec::new()
+        } else {
+            cmd_args_str.split_whitespace().map(|s| s.to_string()).collect()
+        };
+        Some(StdioMcpClient::new(command, &cmd_args).await?)
+    } else {
+        None
+    };
     
     let stdin = io::stdin();
     let reader = BufReader::new(stdin);
@@ -217,7 +328,14 @@ async fn main() -> Result<()> {
             }
             "tools/list" => {
                 if args.verbose {
-                    eprintln!("[INFO] Proxying tools/list request to {}", args.url);
+                    match &transport_mode {
+                        TransportMode::Http => {
+                            eprintln!("[INFO] Proxying tools/list request to {}", args.url.as_ref().unwrap());
+                        }
+                        TransportMode::Stdio => {
+                            eprintln!("[INFO] Proxying tools/list request to STDIO command");
+                        }
+                    }
                 }
                 // Get the tool list from the remote server
                 let mcp_req = MCPRequest {
@@ -225,9 +343,18 @@ async fn main() -> Result<()> {
                     params: serde_json::Value::Object(serde_json::Map::new()),
                 };
                 
-                match proxy_mcp_request(&client, &args.url, mcp_req).await {
+                let proxy_result = match &transport_mode {
+                    TransportMode::Http => {
+                        proxy_mcp_request_http(&client, args.url.as_ref().unwrap(), mcp_req).await
+                    }
+                    TransportMode::Stdio => {
+                        proxy_mcp_request_stdio(stdio_client.as_mut().unwrap(), mcp_req).await
+                    }
+                };
+                
+                match proxy_result {
                     Ok(result) => {
-                        // Extract the inner result from the Microsoft Learn server response
+                        // Extract the inner result from the server response
                         let tools_result = if let Some(inner_result) = result.get("result") {
                             inner_result.clone()
                         } else {
@@ -261,7 +388,14 @@ async fn main() -> Result<()> {
             }
             "tools/call" => {
                 if args.verbose {
-                    eprintln!("[INFO] Proxying tools/call request to {}", args.url);
+                    match &transport_mode {
+                        TransportMode::Http => {
+                            eprintln!("[INFO] Proxying tools/call request to {}", args.url.as_ref().unwrap());
+                        }
+                        TransportMode::Stdio => {
+                            eprintln!("[INFO] Proxying tools/call request to STDIO command");
+                        }
+                    }
                 }
                 // Proxy the tool call to the remote server
                 let mcp_req = MCPRequest {
@@ -269,9 +403,18 @@ async fn main() -> Result<()> {
                     params: request.params.unwrap_or_default(),
                 };
                 
-                match proxy_mcp_request(&client, &args.url, mcp_req).await {
+                let proxy_result = match &transport_mode {
+                    TransportMode::Http => {
+                        proxy_mcp_request_http(&client, args.url.as_ref().unwrap(), mcp_req).await
+                    }
+                    TransportMode::Stdio => {
+                        proxy_mcp_request_stdio(stdio_client.as_mut().unwrap(), mcp_req).await
+                    }
+                };
+                
+                match proxy_result {
                     Ok(result) => {
-                        // Extract the inner result from the Microsoft Learn server response
+                        // Extract the inner result from the server response
                         let call_result = if let Some(inner_result) = result.get("result") {
                             inner_result.clone()
                         } else {
