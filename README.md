@@ -1,17 +1,18 @@
 # MCP Proxy Tool
 
-A high-performance MCP (Model Context Protocol) proxy tool written in Rust that enables connections to both HTTP-based and STDIO-based MCP servers. This tool acts as a bridge, converting between different MCP transport protocols and making MCP servers accessible through a unified interface.
+A high-performance MCP (Model Context Protocol) proxy tool written in Rust that enables connections to HTTP-based, STDIO-based, and named pipe-based MCP servers. This tool acts as a bridge, converting between different MCP transport protocols and making MCP servers accessible through a unified interface.
 
 ## Features
 
-- **Dual Transport Support**: Connect to both HTTP and STDIO-based MCP servers
+- **Triple Transport Support**: Connect to HTTP, STDIO, and named pipe-based MCP servers
 - **HTTP Transport**: Proxy requests to remote HTTP-based MCP servers (like Microsoft Learn)
 - **STDIO Transport**: Launch and communicate with executable MCP servers over stdin/stdout
+- **Named Pipe Transport**: Connect to MCP servers over Unix domain sockets/named pipes
 - **JSON-RPC 2.0 Compatible**: Full support for MCP protocol specifications
 - **High Performance**: Built in Rust with async/await for optimal performance
 - **Configurable Timeouts**: Adjustable timeout settings for HTTP requests
 - **Verbose Logging**: Optional detailed logging for debugging and monitoring
-- **Lightweight**: Small binary size using argh for CLI parsing (5.8MB release build)
+- **Lightweight**: Small binary size using argh for CLI parsing (~6MB release build)
 
 ## Installation
 
@@ -35,13 +36,14 @@ The compiled binary will be available at `target/release/mcp-proxy-tool`.
 ### Command Line Options
 
 ```
-Usage: mcp-proxy-tool [-u <url>] [-c <command>] [-a <args>] [-t <timeout>] [-v]
+Usage: mcp-proxy-tool [-u <url>] [-c <command>] [-a <args>] [-p <pipe>] [-t <timeout>] [-v]
 
 Options:
   -u, --url         URL of the remote HTTP-based MCP server to proxy requests to
   -c, --command     command to execute for STDIO-based MCP server
   -a, --args        arguments for the STDIO-based MCP server command
-  -t, --timeout     timeout in seconds for HTTP requests (ignored for STDIO)
+  -p, --pipe        path to named pipe for named pipe-based MCP server
+  -t, --timeout     timeout in seconds for HTTP requests (ignored for STDIO and named pipe)
   -v, --verbose     enable verbose logging
   --help, help      display usage information
 ```
@@ -73,6 +75,21 @@ Launch and connect to a local executable MCP server:
 ./target/release/mcp-proxy-tool -c python3 -a mcp_server.py -v
 ```
 
+### Named Pipe Transport (Local Socket-based)
+
+Connect to an MCP server over Unix domain sockets/named pipes:
+
+```bash
+# Connect to a named pipe MCP server
+./target/release/mcp-proxy-tool -p /tmp/mcp_server.sock
+
+# Connect to a Unix domain socket with verbose logging
+./target/release/mcp-proxy-tool -p /var/run/mcp/server.socket -v
+
+# Connect to a local socket-based MCP server
+./target/release/mcp-proxy-tool -p /home/user/.mcp/server.pipe -v
+```
+
 ### Basic Usage
 
 ```bash
@@ -87,6 +104,38 @@ echo '{"method": "tools/list", "params": {}}' | ./target/debug/mcp-proxy-tool --
 
 # Search Microsoft Learn documentation
 echo '{"method": "tools/call", "params": {"name": "microsoft_docs_search", "arguments": {"question": "Azure Functions"}}}' | ./target/debug/mcp-proxy-tool
+```
+
+### MCP Protocol Communication Examples
+
+#### HTTP Transport with Microsoft Learn
+```bash
+# Initialize connection
+echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' | ./target/release/mcp-proxy-tool -u https://learn.microsoft.com/api/mcp
+
+# List available tools
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | ./target/release/mcp-proxy-tool -u https://learn.microsoft.com/api/mcp
+
+# Call a tool
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"microsoft_docs_search","arguments":{"question":"How to use Azure Functions?"}}}' | ./target/release/mcp-proxy-tool -u https://learn.microsoft.com/api/mcp
+```
+
+#### STDIO Transport with Custom Server
+```bash
+# List tools from Python MCP server
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | ./target/release/mcp-proxy-tool -c python3 -a echo_server.py
+
+# Call tool via STDIO transport
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"echo","arguments":{"text":"Hello STDIO!"}}}' | ./target/release/mcp-proxy-tool -c python3 -a echo_server.py
+```
+
+#### Named Pipe Transport with Socket Server
+```bash
+# List tools from named pipe MCP server
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | ./target/release/mcp-proxy-tool -p /tmp/mcp_server.sock
+
+# Call tool via named pipe transport
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pipe_echo","arguments":{"message":"Hello Named Pipe!"}}}' | ./target/release/mcp-proxy-tool -p /tmp/mcp_server.sock -v
 ```
 
 ### Configuration Examples
@@ -332,6 +381,60 @@ cargo build
 ```bash
 cargo build --release
 ```
+
+## Transport Modes
+
+The MCP proxy tool supports three different transport mechanisms:
+
+### HTTP Transport (`-u` option)
+- Connects to remote HTTP-based MCP servers
+- Uses reqwest for efficient HTTP communication
+- Supports SSE (Server-Sent Events) responses
+- Configurable timeouts
+- Automatic JSON-RPC request/response handling
+- Best for: Public MCP services, cloud-based servers
+
+### STDIO Transport (`-c` and `-a` options)
+- Launches local executable MCP servers
+- Communicates over stdin/stdout
+- Supports any executable that implements MCP over STDIO
+- Automatic process lifecycle management
+- No timeout limitations (process-based communication)
+- Best for: Local development, packaged MCP servers
+
+### Named Pipe Transport (`-p` option)
+- Connects to MCP servers over Unix domain sockets/named pipes
+- Efficient local inter-process communication
+- Supports both Unix domain sockets and traditional named pipes
+- Low latency for local communication
+- Automatic connection handling
+- Best for: High-performance local servers, system services
+
+## MCP Protocol Support
+
+- **JSON-RPC 2.0**: Full compliance with JSON-RPC specification
+- **MCP Methods**: 
+  - `initialize` - Handled locally by proxy
+  - `notifications/initialized` - Handled locally  
+  - `tools/list` - Forwarded to target server
+  - `tools/call` - Forwarded to target server
+- **Error Handling**: Proper error responses for unknown methods
+- **Unicode Support**: Automatic decoding of Unicode escapes in responses
+
+## Performance
+
+- **Binary Size**: ~6MB release build (using argh for lightweight CLI parsing)
+- **Memory Efficient**: Async/await patterns for minimal resource usage
+- **Fast Startup**: Near-instantaneous startup time
+- **Concurrent**: Handles multiple requests efficiently across all transport modes
+
+## Dependencies
+
+- `tokio` - Async runtime
+- `reqwest` - HTTP client (for HTTP transport)
+- `serde_json` - JSON serialization
+- `anyhow` - Error handling
+- `argh` - Lightweight CLI parsing
 
 ## Contributing
 
