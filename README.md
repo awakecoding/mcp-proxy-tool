@@ -7,7 +7,7 @@ A high-performance MCP (Model Context Protocol) proxy tool written in Rust that 
 - **Triple Transport Support**: Connect to HTTP, STDIO, and named pipe-based MCP servers
 - **HTTP Transport**: Proxy requests to remote HTTP-based MCP servers (like Microsoft Learn)
 - **STDIO Transport**: Launch and communicate with executable MCP servers over stdin/stdout
-- **Named Pipe Transport**: Connect to MCP servers over Unix domain sockets/named pipes
+- **Named Pipe Transport**: Connect to MCP servers over named pipes (Unix sockets + Windows named pipes)
 - **JSON-RPC 2.0 Compatible**: Full support for MCP protocol specifications
 - **High Performance**: Built in Rust with async/await for optimal performance
 - **Configurable Timeouts**: Adjustable timeout settings for HTTP requests
@@ -77,17 +77,33 @@ Launch and connect to a local executable MCP server:
 
 ### Named Pipe Transport (Local Socket-based)
 
-Connect to an MCP server over Unix domain sockets/named pipes:
+Connect to an MCP server over named pipes (cross-platform):
 
+**Unix/Linux/macOS:**
 ```bash
-# Connect to a named pipe MCP server
+# Connect to a Unix domain socket
 ./target/release/mcp-proxy-tool -p /tmp/mcp_server.sock
 
-# Connect to a Unix domain socket with verbose logging
-./target/release/mcp-proxy-tool -p /var/run/mcp/server.socket -v
+# Connect to a FIFO named pipe
+./target/release/mcp-proxy-tool -p /var/run/mcp/server.pipe -v
+```
 
-# Connect to a local socket-based MCP server
-./target/release/mcp-proxy-tool -p /home/user/.mcp/server.pipe -v
+**Windows:**
+```cmd
+# Connect to a Windows named pipe (short form)
+mcp-proxy-tool.exe -p mcp_server
+
+# Connect to a Windows named pipe (full path)
+mcp-proxy-tool.exe -p \\.\pipe\mcp_server -v
+```
+
+**PowerShell Examples:**
+```powershell
+# List tools from Windows named pipe MCP server
+'{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | .\mcp-proxy-tool.exe -p mcp_server
+
+# Call tool with verbose logging
+'{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"example","arguments":{"text":"Hello Windows!"}}}' | .\mcp-proxy-tool.exe -p \\.\pipe\mcp_server -v
 ```
 
 ### Basic Usage
@@ -137,6 +153,113 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | ./target/rel
 # Call tool via named pipe transport
 echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pipe_echo","arguments":{"message":"Hello Named Pipe!"}}}' | ./target/release/mcp-proxy-tool -p /tmp/mcp_server.sock -v
 ```
+
+## Windows Named Pipe Support
+
+### Windows Named Pipe Paths
+
+Windows named pipes use a different path format than Unix:
+
+- **Short form**: `pipename` (automatically converted to `\\.\pipe\pipename`)
+- **Full form**: `\\.\pipe\pipename` (explicit Windows named pipe path)
+
+### Windows Command Examples
+
+**Command Prompt:**
+```cmd
+REM List tools from Windows named pipe MCP server
+echo {"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}} | mcp-proxy-tool.exe -p mcp_server
+
+REM Call tool with full pipe path
+echo {"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"example","arguments":{"text":"Hello Windows!"}}} | mcp-proxy-tool.exe -p \\.\pipe\mcp_server -v
+```
+
+**PowerShell:**
+```powershell
+# List tools from Windows named pipe MCP server
+'{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | .\mcp-proxy-tool.exe -p mcp_server
+
+# Call tool with verbose logging
+'{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"example","arguments":{"text":"Hello Windows!"}}}' | .\mcp-proxy-tool.exe -p \\.\pipe\mcp_server -v
+```
+
+### Creating a Windows Named Pipe MCP Server
+
+Example Python server for Windows (requires `pywin32`):
+
+```python
+import win32pipe
+import win32file
+import json
+import threading
+
+def handle_client(pipe):
+    while True:
+        try:
+            # Read request
+            result, data = win32file.ReadFile(pipe, 4096)
+            request = json.loads(data.decode('utf-8').strip())
+            
+            # Process request (example)
+            if request.get('method') == 'tools/list':
+                response = {
+                    "jsonrpc": "2.0",
+                    "id": request.get('id'),
+                    "result": {"tools": [{"name": "echo", "description": "Echo tool"}]}
+                }
+            else:
+                response = {
+                    "jsonrpc": "2.0", 
+                    "id": request.get('id'), 
+                    "error": {"code": -32601, "message": "Method not found"}
+                }
+            
+            # Send response
+            win32file.WriteFile(pipe, (json.dumps(response) + '\n').encode('utf-8'))
+            
+        except Exception as e:
+            print(f"Error: {e}")
+            break
+    
+    win32file.CloseHandle(pipe)
+
+def main():
+    pipe_name = r'\\.\pipe\mcp_server'
+    
+    while True:
+        pipe = win32pipe.CreateNamedPipe(
+            pipe_name,
+            win32pipe.PIPE_ACCESS_DUPLEX,
+            win32pipe.PIPE_TYPE_MESSAGE | win32pipe.PIPE_READMODE_MESSAGE | win32pipe.PIPE_WAIT,
+            1, 65536, 65536, 0, None
+        )
+        
+        win32pipe.ConnectNamedPipe(pipe, None)
+        
+        # Handle client in thread
+        thread = threading.Thread(target=handle_client, args=(pipe,))
+        thread.start()
+
+if __name__ == "__main__":
+    main()
+```
+
+### Platform Differences
+
+| Feature | Unix/Linux/macOS | Windows |
+|---------|------------------|---------|
+| Path Format | `/path/to/socket` | `pipename` or `\\.\pipe\pipename` |
+| Connection Type | Unix Domain Socket | Windows Named Pipe |
+| Permissions | File system permissions | Windows security descriptors |
+| Performance | Very high (kernel bypass) | High (optimized IPC) |
+| Auto-cleanup | OS handles cleanup | OS handles cleanup |
+
+### Troubleshooting Windows Named Pipes
+
+1. **Access Denied**: Check Windows permissions for named pipe access
+2. **Pipe Not Found**: Ensure the MCP server is running and pipe name is correct
+3. **Connection Failed**: Verify the pipe name format (`\\.\pipe\name`)
+4. **Timeout Issues**: Windows named pipes have different timeout behavior than Unix sockets
 
 ### Configuration Examples
 
@@ -373,13 +496,40 @@ cargo test
 ### Development Build
 
 ```bash
+# Unix/Linux/macOS
+cargo build
+
+# Windows (Command Prompt)
+cargo build
+
+# Windows (PowerShell)
 cargo build
 ```
 
 ### Release Build
 
 ```bash
+# Unix/Linux/macOS
 cargo build --release
+
+# Windows (Command Prompt)
+cargo build --release
+
+# Windows (PowerShell)
+cargo build --release
+```
+
+### Cross-Platform Builds
+
+```bash
+# Build for Windows from Unix/Linux/macOS
+cargo build --release --target x86_64-pc-windows-msvc
+
+# Build for Linux from Windows/macOS
+cargo build --release --target x86_64-unknown-linux-gnu
+
+# Build for macOS from Windows/Linux (requires macOS SDK)
+cargo build --release --target x86_64-apple-darwin
 ```
 
 ## Transport Modes
@@ -403,12 +553,12 @@ The MCP proxy tool supports three different transport mechanisms:
 - Best for: Local development, packaged MCP servers
 
 ### Named Pipe Transport (`-p` option)
-- Connects to MCP servers over Unix domain sockets/named pipes
-- Efficient local inter-process communication
-- Supports both Unix domain sockets and traditional named pipes
-- Low latency for local communication
-- Automatic connection handling
-- Best for: High-performance local servers, system services
+- **Cross-platform support**: Unix domain sockets (Unix/Linux/macOS) and Windows named pipes
+- **Unix/Linux/macOS**: Supports Unix domain sockets and FIFO pipes
+- **Windows**: Native Windows named pipe support (`\\.\pipe\name`)
+- **Efficient IPC**: Low latency for local inter-process communication
+- **Automatic handling**: Platform-specific connection management
+- **Best for**: High-performance local servers, system services, cross-platform applications
 
 ## MCP Protocol Support
 

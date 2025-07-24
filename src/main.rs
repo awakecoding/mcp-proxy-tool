@@ -11,7 +11,12 @@ use std::process::Stdio;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader as TokioBufReader};
 use tokio::process::{Child, Command as TokioCommand};
 use tokio::fs::OpenOptions;
+
+#[cfg(unix)]
 use tokio::net::UnixStream;
+
+#[cfg(windows)]
+use tokio::net::windows::named_pipe::ClientOptions;
 
 // ----------------------------
 // Structs for request/response
@@ -32,7 +37,7 @@ struct Args {
     #[argh(option, short = 'a')]
     args: Option<String>,
     
-    /// path to named pipe for named pipe-based MCP server
+    /// path to named pipe for named pipe-based MCP server (Unix: /path/to/pipe, Windows: pipename or \\.\pipe\pipename)
     #[argh(option, short = 'p')]
     pipe: Option<String>,
     
@@ -134,48 +139,79 @@ impl NamedPipeMcpClient {
     }
     
     async fn send_request(&self, request: &str) -> Result<String> {
-        // For named pipes, we open the pipe, write the request, and read the response
-        // This assumes the named pipe server can handle request/response pairs
+        // Platform-specific named pipe handling
         
-        // Try opening as a Unix socket first (more common for MCP servers)
-        if let Ok(mut stream) = UnixStream::connect(&self.pipe_path).await {
-            // Send request
-            stream.write_all(request.as_bytes()).await?;
-            stream.write_all(b"\n").await?;
+        #[cfg(unix)]
+        {
+            // Try opening as a Unix socket first (more common for MCP servers)
+            if let Ok(mut stream) = UnixStream::connect(&self.pipe_path).await {
+                // Send request
+                stream.write_all(request.as_bytes()).await?;
+                stream.write_all(b"\n").await?;
+                
+                // Read response
+                let mut reader = TokioBufReader::new(stream);
+                let mut response = String::new();
+                reader.read_line(&mut response).await?;
+                
+                return Ok(response.trim().to_string());
+            }
             
-            // Read response
-            let mut reader = TokioBufReader::new(stream);
+            // Fallback to named pipe (FIFO) approach
+            let mut write_file = OpenOptions::new()
+                .write(true)
+                .open(&self.pipe_path)
+                .await
+                .with_context(|| format!("Failed to open named pipe for writing: {}", self.pipe_path))?;
+                
+            write_file.write_all(request.as_bytes()).await?;
+            write_file.write_all(b"\n").await?;
+            write_file.flush().await?;
+            
+            let read_file = OpenOptions::new()
+                .read(true)
+                .open(&self.pipe_path)
+                .await
+                .with_context(|| format!("Failed to open named pipe for reading: {}", self.pipe_path))?;
+                
+            let mut reader = TokioBufReader::new(read_file);
             let mut response = String::new();
             reader.read_line(&mut response).await?;
             
-            return Ok(response.trim().to_string());
+            Ok(response.trim().to_string())
         }
         
-        // Fallback to named pipe (FIFO) approach
-        // Open the pipe for writing (send request)
-        let mut write_file = OpenOptions::new()
-            .write(true)
-            .open(&self.pipe_path)
-            .await
-            .with_context(|| format!("Failed to open named pipe for writing: {}", self.pipe_path))?;
+        #[cfg(windows)]
+        {
+            // Windows named pipe support
+            // Format the pipe name properly for Windows (e.g., \\.\pipe\pipename)
+            let pipe_name = if self.pipe_path.starts_with(r"\\.\pipe\") {
+                self.pipe_path.clone()
+            } else {
+                format!(r"\\.\pipe\{}", self.pipe_path)
+            };
             
-        write_file.write_all(request.as_bytes()).await?;
-        write_file.write_all(b"\n").await?;
-        write_file.flush().await?;
-        
-        // For FIFO pipes, we typically need a separate read pipe or the same pipe
-        // This is a simplified implementation - you might need to adjust based on your server
-        let read_file = OpenOptions::new()
-            .read(true)
-            .open(&self.pipe_path)
-            .await
-            .with_context(|| format!("Failed to open named pipe for reading: {}", self.pipe_path))?;
+            let mut client = ClientOptions::new()
+                .open(&pipe_name)
+                .await
+                .with_context(|| format!("Failed to connect to Windows named pipe: {}", pipe_name))?;
             
-        let mut reader = TokioBufReader::new(read_file);
-        let mut response = String::new();
-        reader.read_line(&mut response).await?;
+            // Send request
+            client.write_all(request.as_bytes()).await?;
+            client.write_all(b"\n").await?;
+            
+            // Read response
+            let mut reader = TokioBufReader::new(client);
+            let mut response = String::new();
+            reader.read_line(&mut response).await?;
+            
+            Ok(response.trim().to_string())
+        }
         
-        Ok(response.trim().to_string())
+        #[cfg(not(any(unix, windows)))]
+        {
+            Err(anyhow::anyhow!("Named pipe transport is not supported on this platform"))
+        }
     }
 }
 
