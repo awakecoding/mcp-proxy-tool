@@ -1,0 +1,8 @@
+[target.aarch64-unknown-linux-gnu]
+linker = "aarch64-linux-gnu-gcc"
+
+[target.aarch64-pc-windows-msvc]
+# Windows ARM64 cross-compilation is handled by the MSVC toolchain
+
+[target.aarch64-apple-darwin]
+# macOS ARM64 cross-compilation is handled by Xcode toolchain

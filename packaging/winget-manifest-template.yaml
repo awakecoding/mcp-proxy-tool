@@ -1,0 +1,46 @@
+# Winget Package Manifest Template
+# 
+# This template should be used to create a submission to the winget-pkgs repository
+# https://github.com/microsoft/winget-pkgs
+#
+# Steps to publish to Winget:
+# 1. Fork the winget-pkgs repository
+# 2. Create a new manifest under manifests/a/awakecoding/mcp-proxy-tool/
+# 3. Use the structure below and update with actual release information
+# 4. Submit a pull request
+
+# File: manifests/a/awakecoding/mcp-proxy-tool/{version}/awakecoding.mcp-proxy-tool.yaml
+
+PackageIdentifier: awakecoding.mcp-proxy-tool
+PackageVersion: "{VERSION}" # Replace with actual version like 1.0.0
+PackageLocale: en-US
+Publisher: awakecoding
+PublisherUrl: https://github.com/awakecoding
+PublisherSupportUrl: https://github.com/awakecoding/mcp-proxy-tool/issues
+Author: awakecoding
+PackageName: MCP Proxy Tool
+PackageUrl: https://github.com/awakecoding/mcp-proxy-tool
+License: MIT # Update if different
+LicenseUrl: https://github.com/awakecoding/mcp-proxy-tool/blob/master/LICENSE
+ShortDescription: Cross-platform MCP (Model Context Protocol) proxy tool
+Description: |
+  A command-line proxy tool that forwards Model Context Protocol (MCP) requests 
+  to HTTP, STDIO, or named pipe-based MCP servers. Supports multiple transport 
+  modes and cross-platform operation.
+Tags:
+- mcp
+- proxy
+- cli
+- model-context-protocol
+ReleaseDate: "{RELEASE_DATE}" # YYYY-MM-DD format
+Installers:
+- Architecture: x64
+  InstallerType: zip
+  InstallerUrl: https://github.com/awakecoding/mcp-proxy-tool/releases/download/v{VERSION}/mcp-proxy-tool-windows-x64.zip
+  InstallerSha256: "{SHA256_X64}" # Replace with actual SHA256
+- Architecture: arm64
+  InstallerType: zip
+  InstallerUrl: https://github.com/awakecoding/mcp-proxy-tool/releases/download/v{VERSION}/mcp-proxy-tool-windows-arm64.zip
+  InstallerSha256: "{SHA256_ARM64}" # Replace with actual SHA256
+ManifestType: singleton
+ManifestVersion: 1.4.0

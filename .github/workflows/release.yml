@@ -1,0 +1,274 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release'
+        required: true
+        type: string
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          # Windows - Latest for best toolchain support
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            archive: zip
+          - target: aarch64-pc-windows-msvc
+            os: windows-latest-arm64  # Native ARM64 Windows runner
+            archive: zip
+          
+          # macOS - Use older version for backward compatibility
+          - target: x86_64-apple-darwin
+            os: macos-12  # Better compatibility with older macOS versions
+            archive: tar.gz
+          - target: aarch64-apple-darwin
+            os: macos-12
+            archive: tar.gz
+          
+          # Linux - Use older Ubuntu for better glibc compatibility and native ARM64
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-20.04  # glibc 2.31 - supports most modern Linux distros
+            archive: tar.gz
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-22.04-arm  # Native ARM64 Linux runner (available January 2025)
+            archive: tar.gz
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Configure macOS deployment target
+      if: contains(matrix.target, 'apple-darwin')
+      shell: pwsh
+      run: |
+        # Set minimum macOS version to 10.15 (Catalina) for broad compatibility
+        "MACOSX_DEPLOYMENT_TARGET=10.15" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+    - name: Install Rust target
+      shell: pwsh
+      run: |
+        # Add the target for cross-compilation
+        rustup target add ${{ matrix.target }}
+        
+        # Verify what we have
+        rustc --version
+        cargo --version
+        rustup show
+
+    - name: Cache cargo registry
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+        key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Build
+      run: cargo build --release --target ${{ matrix.target }}
+
+    - name: Get binary name
+      id: binary
+      shell: pwsh
+      run: |
+        if ("${{ matrix.target }}" -like "*windows*") {
+          "name=mcp-proxy-tool.exe" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "path=target/${{ matrix.target }}/release/mcp-proxy-tool.exe" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+        } else {
+          "name=mcp-proxy-tool" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "path=target/${{ matrix.target }}/release/mcp-proxy-tool" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+        }
+
+    - name: Create archive
+      id: archive
+      shell: pwsh
+      run: |
+        New-Item -ItemType Directory -Path dist -Force | Out-Null
+        Copy-Item "${{ steps.binary.outputs.path }}" dist/
+        if (Test-Path "README.md") { Copy-Item "README.md" dist/ }
+        if (Test-Path "LICENSE") { Copy-Item "LICENSE*" dist/ }
+        
+        # Map Rust targets to user-friendly names
+        $osArch = switch ("${{ matrix.target }}") {
+          "x86_64-pc-windows-msvc"    { "windows-x64" }
+          "aarch64-pc-windows-msvc"   { "windows-arm64" }
+          "x86_64-apple-darwin"       { "macos-x64" }
+          "aarch64-apple-darwin"      { "macos-arm64" }
+          "x86_64-unknown-linux-gnu"  { "linux-x64" }
+          "aarch64-unknown-linux-gnu" { "linux-arm64" }
+          default { "${{ matrix.target }}" }
+        }
+        
+        if ("${{ matrix.archive }}" -eq "zip") {
+          Push-Location dist
+          if ($IsWindows) {
+            7z a ../mcp-proxy-tool-$osArch.zip *
+          } else {
+            zip -r ../mcp-proxy-tool-$osArch.zip *
+          }
+          Pop-Location
+          "path=mcp-proxy-tool-$osArch.zip" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+        } else {
+          tar -czf mcp-proxy-tool-$osArch.tar.gz -C dist .
+          "path=mcp-proxy-tool-$osArch.tar.gz" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+        }
+
+    - name: Upload artifact
+      shell: pwsh
+      run: |
+        # Map target to user-friendly name for artifact directory
+        $osArch = switch ("${{ matrix.target }}") {
+          "x86_64-pc-windows-msvc"    { "windows-x64" }
+          "aarch64-pc-windows-msvc"   { "windows-arm64" }
+          "x86_64-apple-darwin"       { "macos-x64" }
+          "aarch64-apple-darwin"      { "macos-arm64" }
+          "x86_64-unknown-linux-gnu"  { "linux-x64" }
+          "aarch64-unknown-linux-gnu" { "linux-arm64" }
+          default { "${{ matrix.target }}" }
+        }
+        
+        # Create artifacts directory structure
+        $artifactDir = "artifacts/mcp-proxy-tool-$osArch"
+        New-Item -ItemType Directory -Path $artifactDir -Force | Out-Null
+        
+        # Copy the archive to the artifacts directory
+        Copy-Item "${{ steps.archive.outputs.path }}" $artifactDir/
+        
+        # GitHub automatically preserves artifacts between jobs
+        Write-Host "✓ Artifact prepared: ${{ steps.archive.outputs.path }}"
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Download artifacts
+      shell: pwsh
+      run: |
+        # Download artifacts from each build job
+        $platforms = @(
+          "windows-x64", "windows-arm64",
+          "macos-x64", "macos-arm64", 
+          "linux-x64", "linux-arm64"
+        )
+        
+        New-Item -ItemType Directory -Path "artifacts" -Force | Out-Null
+        
+        foreach ($platform in $platforms) {
+          $artifactPath = "artifacts/mcp-proxy-tool-$platform"
+          if (Test-Path $artifactPath) {
+            Write-Host "✓ Found artifacts for $platform"
+            Get-ChildItem $artifactPath | ForEach-Object {
+              Copy-Item $_.FullName "artifacts/"
+            }
+          }
+        }
+
+    - name: Get tag
+      id: tag
+      shell: pwsh
+      run: |
+        if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+          "tag=${{ github.event.inputs.tag }}" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+        } else {
+          $tag = "${{ github.ref }}" -replace "refs/tags/", ""
+          "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+        }
+
+    - name: Generate checksums
+      shell: pwsh
+      run: |
+        Push-Location artifacts
+        Get-ChildItem -Recurse -Include "*.zip", "*.tar.gz" | ForEach-Object {
+          $hash = Get-FileHash $_.FullName -Algorithm SHA256
+          $relativePath = $_.FullName -replace [regex]::Escape((Get-Location).Path + [System.IO.Path]::DirectorySeparatorChar), ""
+          "$($hash.Hash.ToLower())  $relativePath"
+        } | Out-File -FilePath "../checksums.txt" -Encoding UTF8
+        Pop-Location
+
+    - name: Create Release
+      shell: pwsh
+      run: |
+        # Install GitHub CLI if not available
+        if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
+          if ($IsWindows) {
+            Invoke-WebRequest -Uri "https://github.com/cli/cli/releases/latest/download/gh_windows_amd64.zip" -OutFile "gh.zip"
+            Expand-Archive "gh.zip" -DestinationPath "gh"
+            $env:PATH = "$(Get-Location)/gh/bin;$env:PATH"
+          } else {
+            curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+            echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+            sudo apt update && sudo apt install gh
+          }
+        }
+        
+        # Prepare release assets
+        $assets = Get-ChildItem artifacts -Include "*.zip", "*.tar.gz" -Recurse | ForEach-Object { $_.FullName }
+        $assets += "checksums.txt"
+        
+        # Create release body
+        $body = @"
+        ## MCP Proxy Tool ${{ steps.tag.outputs.tag }}
+        
+        Cross-platform MCP (Model Context Protocol) proxy tool that forwards requests to HTTP, STDIO, or named pipe-based MCP servers.
+        
+        ### Installation
+        
+        Download the appropriate binary for your platform below.
+        
+        ### Supported Platforms
+        
+        - **Windows**: x86_64, ARM64
+        - **macOS**: Intel (x86_64), Apple Silicon (ARM64)
+        - **Linux**: x86_64, ARM64
+        
+        ### Usage
+        
+        ``````bash
+        # HTTP proxy
+        mcp-proxy-tool -u https://example.com/mcp
+        
+        # STDIO proxy
+        mcp-proxy-tool -c python -a "mcp_server.py"
+        
+        # Named pipe proxy (Windows)
+        mcp-proxy-tool -p "mcp-server-pipe"
+        
+        # Named pipe proxy (Unix)
+        mcp-proxy-tool -p "/tmp/mcp-server.sock"
+        ``````
+        
+        ### Checksums
+        
+        See ``checksums.txt`` for SHA256 verification.
+        "@
+        
+        # Create the release
+        $bodyFile = "release-body.md"
+        $body | Out-File -FilePath $bodyFile -Encoding UTF8
+        
+        $assetArgs = $assets | ForEach-Object { "--attach", $_ }
+        
+        gh release create "${{ steps.tag.outputs.tag }}" @assetArgs `
+          --title "Release ${{ steps.tag.outputs.tag }}" `
+          --notes-file $bodyFile
+        
+        Write-Host "✓ Release created successfully!"
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,146 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: Test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          # Linux - Use older Ubuntu for better compatibility and native ARM64
+          - os: ubuntu-20.04  # Supports glibc 2.31+ (Ubuntu 20.04, CentOS 8, etc.)
+            target: x86_64-unknown-linux-gnu
+            arch: x64
+          - os: ubuntu-22.04-arm  # Native ARM64 Linux runner (available January 2025)
+            target: aarch64-unknown-linux-gnu
+            arch: arm64
+          # Windows - Native support handles compatibility well
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            arch: x64
+          - os: windows-latest-arm64  # Native ARM64 Windows runner (available April 2025)
+            target: aarch64-pc-windows-msvc
+            arch: arm64
+          # macOS - Use older macOS for backward compatibility
+          - os: macos-12  # Supports macOS 10.15+ when properly configured
+            target: x86_64-apple-darwin
+            arch: x64
+          - os: macos-12  # Cross-compile only (tests run on x64)
+            target: aarch64-apple-darwin
+            arch: arm64
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ matrix.target }}
+
+    - name: Configure macOS deployment target
+      if: runner.os == 'macOS'
+      shell: pwsh
+      run: |
+        # Set minimum macOS version to 10.15 (Catalina) for broad compatibility
+        "MACOSX_DEPLOYMENT_TARGET=10.15" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+    - name: Configure Linux static linking (optional for maximum compatibility)
+      if: runner.os == 'Linux'
+      shell: pwsh
+      run: |
+        # Uncomment the following lines for fully static binaries (larger but more compatible)
+        # "RUSTFLAGS=-C target-feature=+crt-static" | Out-File -FilePath $env:GITHUB_ENV -Append
+        Write-Host "Using dynamic linking for smaller binaries"
+
+    - name: Cache cargo registry
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-${{ matrix.arch }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Run tests
+      # Run tests on native architectures (now includes Linux ARM64!)
+      if: |
+        (runner.os == 'Windows' && matrix.target == 'x86_64-pc-windows-msvc') ||
+        (runner.os == 'Windows' && matrix.target == 'aarch64-pc-windows-msvc') ||
+        (runner.os == 'macOS' && matrix.target == 'x86_64-apple-darwin') ||
+        (runner.os == 'Linux' && matrix.target == 'x86_64-unknown-linux-gnu') ||
+        (runner.os == 'Linux' && matrix.target == 'aarch64-unknown-linux-gnu')
+      run: cargo test --verbose --target ${{ matrix.target }}
+
+    - name: Build
+      run: cargo build --verbose --target ${{ matrix.target }}
+
+    - name: Run clippy
+      # Run clippy on native architectures (now includes Linux ARM64!)
+      if: |
+        (runner.os == 'Windows' && matrix.target == 'x86_64-pc-windows-msvc') ||
+        (runner.os == 'Windows' && matrix.target == 'aarch64-pc-windows-msvc') ||
+        (runner.os == 'macOS' && matrix.target == 'x86_64-apple-darwin') ||
+        (runner.os == 'Linux' && matrix.target == 'x86_64-unknown-linux-gnu') ||
+        (runner.os == 'Linux' && matrix.target == 'aarch64-unknown-linux-gnu')
+      run: cargo clippy --target ${{ matrix.target }} -- -D warnings
+
+    - name: Check formatting
+      # Only check formatting once (on Linux x64)
+      if: runner.os == 'Linux' && matrix.target == 'x86_64-unknown-linux-gnu'
+      run: cargo fmt -- --check
+
+    - name: Verify binary compatibility (Linux)
+      if: runner.os == 'Linux'
+      shell: pwsh
+      run: |
+        Write-Host "Checking glibc version requirements:"
+        try {
+          $glibcInfo = objdump -T target/${{ matrix.target }}/debug/mcp-proxy-tool | grep GLIBC | sort -u
+          if ($glibcInfo) { $glibcInfo } else { Write-Host "No glibc dependencies found" }
+        } catch {
+          Write-Host "No glibc dependencies found"
+        }
+        Write-Host "Binary info:"
+        file target/${{ matrix.target }}/debug/mcp-proxy-tool
+        Write-Host "Architecture: ${{ matrix.arch }}"
+        Write-Host "Runner OS: ${{ runner.os }}"
+
+    - name: Verify binary compatibility (macOS)
+      if: runner.os == 'macOS'
+      shell: pwsh
+      run: |
+        Write-Host "Checking macOS deployment target:"
+        try {
+          $versionInfo = otool -l target/${{ matrix.target }}/debug/mcp-proxy-tool | grep -A 3 LC_VERSION_MIN_MACOSX
+          if ($versionInfo) { $versionInfo } else { Write-Host "No version info found" }
+        } catch {
+          Write-Host "No version info found"
+        }
+        Write-Host "Binary info:"
+        file target/${{ matrix.target }}/debug/mcp-proxy-tool
+
+  security_audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+    
+    - name: Install cargo-audit
+      run: cargo install cargo-audit
+    
+    - name: Run audit
+      run: cargo audit

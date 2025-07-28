@@ -1,7 +1,15 @@
 [package]
 name = "mcp-proxy-tool"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
+authors = ["awakecoding"]
+license = "MIT"
+description = "Cross-platform MCP (Model Context Protocol) proxy tool"
+homepage = "https://github.com/awakecoding/mcp-proxy-tool"
+repository = "https://github.com/awakecoding/mcp-proxy-tool"
+readme = "README.md"
+keywords = ["mcp", "proxy", "cli", "model-context-protocol"]
+categories = ["command-line-utilities", "network-programming"]
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
@@ -10,3 +18,9 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 anyhow = "1"
 argh = "0.1"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

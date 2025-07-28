@@ -12,24 +12,63 @@ A high-performance MCP (Model Context Protocol) proxy tool written in Rust that 
 - **High Performance**: Built in Rust with async/await for optimal performance
 - **Configurable Timeouts**: Adjustable timeout settings for HTTP requests
 - **Verbose Logging**: Optional detailed logging for debugging and monitoring
-- **Lightweight**: Small binary size using argh for CLI parsing (~6MB release build)
+- **Cross-Platform**: Supports Windows, macOS, and Linux
 
 ## Installation
 
-### Prerequisites
+### Pre-built Binaries
 
-- Rust (latest stable version)
-- Cargo
+Download the latest release for your platform from the [GitHub Releases](https://github.com/awakecoding/mcp-proxy-tool/releases) page.
 
-### Build from source
+#### Windows
+
+**Option 1: Direct Download**
+1. Download `mcp-proxy-tool-x86_64-pc-windows-msvc.zip` (Intel/AMD) or `mcp-proxy-tool-aarch64-pc-windows-msvc.zip` (ARM64)
+2. Extract the ZIP file
+3. Add the extracted directory to your PATH or run directly
+
+**Option 2: Winget (Coming Soon)**
+```powershell
+winget install awakecoding.mcp-proxy-tool
+```
+
+#### macOS
+
+**Option 1: Direct Download**
+1. Download `mcp-proxy-tool-x86_64-apple-darwin.tar.gz` (Intel) or `mcp-proxy-tool-aarch64-apple-darwin.tar.gz` (Apple Silicon)
+2. Extract: `tar -xzf mcp-proxy-tool-*.tar.gz`
+3. Move to PATH: `sudo mv mcp-proxy-tool /usr/local/bin/`
+
+**Option 2: Homebrew (Coming Soon)**
+```bash
+brew tap awakecoding/tap
+brew install mcp-proxy-tool
+```
+
+#### Linux
+
+**Direct Download**
+1. Download `mcp-proxy-tool-x86_64-unknown-linux-gnu.tar.gz` (x86_64) or `mcp-proxy-tool-aarch64-unknown-linux-gnu.tar.gz` (ARM64)
+2. Extract: `tar -xzf mcp-proxy-tool-*.tar.gz`
+3. Move to PATH: `sudo mv mcp-proxy-tool /usr/local/bin/`
+
+### From Source
+
+**Prerequisites**: Rust (latest stable version)
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/awakecoding/mcp-proxy-tool.git
 cd mcp-proxy-tool
 cargo build --release
 ```
 
 The compiled binary will be available at `target/release/mcp-proxy-tool`.
+
+### From Cargo
+
+```bash
+cargo install mcp-proxy-tool
+```
 
 ## Usage
 
