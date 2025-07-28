@@ -30,23 +30,23 @@ struct Args {
     /// URL of the remote HTTP-based MCP server to proxy requests to
     #[argh(option, short = 'u')]
     url: Option<String>,
-    
+
     /// command to execute for STDIO-based MCP server
     #[argh(option, short = 'c')]
     command: Option<String>,
-    
+
     /// arguments for the STDIO-based MCP server command
     #[argh(option, short = 'a')]
     args: Option<String>,
-    
+
     /// path to named pipe for named pipe-based MCP server (Unix: /path/to/pipe, Windows: pipename or \\.\pipe\pipename)
     #[argh(option, short = 'p')]
     pipe: Option<String>,
-    
+
     /// timeout in seconds for HTTP requests (ignored for STDIO and named pipe)
     #[argh(option, short = 't', default = "30")]
     timeout: u64,
-    
+
     /// enable verbose logging
     #[argh(switch, short = 'v')]
     verbose: bool,
@@ -88,6 +88,7 @@ struct JsonRpcResponse {
 // MCP Client Logic
 // ----------------------------
 
+#[allow(dead_code)]
 struct StdioMcpClient {
     process: Child,
     stdin: tokio::process::ChildStdin,
@@ -101,30 +102,30 @@ impl StdioMcpClient {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
-        
+
         let mut process = cmd.spawn().context("Failed to spawn MCP server process")?;
-        
+
         let stdin = process.stdin.take().context("Failed to get stdin")?;
         let stdout = process.stdout.take().context("Failed to get stdout")?;
         let stdout = TokioBufReader::new(stdout);
-        
+
         Ok(StdioMcpClient {
             process,
             stdin,
             stdout,
         })
     }
-    
+
     async fn send_request(&mut self, request: &str) -> Result<String> {
         // Send request
         self.stdin.write_all(request.as_bytes()).await?;
         self.stdin.write_all(b"\n").await?;
         self.stdin.flush().await?;
-        
+
         // Read response
         let mut response = String::new();
         self.stdout.read_line(&mut response).await?;
-        
+
         Ok(response.trim().to_string())
     }
 }
@@ -139,10 +140,10 @@ impl NamedPipeMcpClient {
             pipe_path: pipe_path.to_string(),
         }
     }
-    
+
     async fn send_request(&self, request: &str) -> Result<String> {
         // Platform-specific named pipe handling
-        
+
         #[cfg(unix)]
         {
             // Try opening as a Unix socket first (more common for MCP servers)
@@ -150,39 +151,45 @@ impl NamedPipeMcpClient {
                 // Send request
                 stream.write_all(request.as_bytes()).await?;
                 stream.write_all(b"\n").await?;
-                
+
                 // Read response
                 let mut reader = TokioBufReader::new(stream);
                 let mut response = String::new();
                 reader.read_line(&mut response).await?;
-                
+
                 return Ok(response.trim().to_string());
             }
-            
+
             // Fallback to named pipe (FIFO) approach
             let mut write_file = OpenOptions::new()
                 .write(true)
                 .open(&self.pipe_path)
                 .await
-                .with_context(|| format!("Failed to open named pipe for writing: {}", self.pipe_path))?;
-                
+                .with_context(|| {
+                    let pipe_path = &self.pipe_path;
+                    format!("Failed to open named pipe for writing: {pipe_path}")
+                })?;
+
             write_file.write_all(request.as_bytes()).await?;
             write_file.write_all(b"\n").await?;
             write_file.flush().await?;
-            
+
             let read_file = OpenOptions::new()
                 .read(true)
                 .open(&self.pipe_path)
                 .await
-                .with_context(|| format!("Failed to open named pipe for reading: {}", self.pipe_path))?;
-                
+                .with_context(|| {
+                    let pipe_path = &self.pipe_path;
+                    format!("Failed to open named pipe for reading: {pipe_path}")
+                })?;
+
             let mut reader = TokioBufReader::new(read_file);
             let mut response = String::new();
             reader.read_line(&mut response).await?;
-            
+
             Ok(response.trim().to_string())
         }
-        
+
         #[cfg(windows)]
         {
             // Windows named pipe support
@@ -192,33 +199,39 @@ impl NamedPipeMcpClient {
             } else {
                 format!(r"\\.\pipe\{}", self.pipe_path)
             };
-            
+
             let mut client = ClientOptions::new()
                 .open(&pipe_name)
-                .with_context(|| format!("Failed to connect to Windows named pipe: {}", pipe_name))?;
-            
+                .with_context(|| format!("Failed to connect to Windows named pipe: {pipe_name}"))?;
+
             // Send request
             client.write_all(request.as_bytes()).await?;
             client.write_all(b"\n").await?;
-            
+
             // Read response
             let mut reader = TokioBufReader::new(client);
             let mut response = String::new();
             reader.read_line(&mut response).await?;
-            
+
             Ok(response.trim().to_string())
         }
-        
+
         #[cfg(not(any(unix, windows)))]
         {
-            Err(anyhow::anyhow!("Named pipe transport is not supported on this platform"))
+            Err(anyhow::anyhow!(
+                "Named pipe transport is not supported on this platform"
+            ))
         }
     }
 }
 
-async fn proxy_mcp_request_http(client: &Client, base_url: &str, req: MCPRequest) -> Result<serde_json::Value> {
+async fn proxy_mcp_request_http(
+    client: &Client,
+    base_url: &str,
+    req: MCPRequest,
+) -> Result<serde_json::Value> {
     let url = base_url.trim_end_matches('/');
-    
+
     // Create JSON-RPC request
     let rpc_request = JsonRpcRequest {
         jsonrpc: "2.0".to_string(),
@@ -244,27 +257,30 @@ async fn proxy_mcp_request_http(client: &Client, base_url: &str, req: MCPRequest
     }
 
     // Handle Server-Sent Events (SSE) format
-    let mut json_response: serde_json::Value = if body_text.starts_with("event:") || body_text.contains("data:") {
-        // Parse SSE format
-        let mut json_data = String::new();
-        for line in body_text.lines() {
-            if line.starts_with("data: ") {
-                json_data = line.strip_prefix("data: ").unwrap_or("").to_string();
-                break;
+    let mut json_response: serde_json::Value =
+        if body_text.starts_with("event:") || body_text.contains("data:") {
+            // Parse SSE format
+            let mut json_data = String::new();
+            for line in body_text.lines() {
+                if line.starts_with("data: ") {
+                    json_data = line.strip_prefix("data: ").unwrap_or("").to_string();
+                    break;
+                }
             }
-        }
-        
-        if json_data.is_empty() {
-            return Err(anyhow::anyhow!("No data found in SSE response"));
-        }
-        
-        serde_json::from_str(&json_data)
-            .with_context(|| format!("Failed to parse SSE JSON data. Status: {}, Data: {}", status, json_data))?
-    } else {
-        // Handle regular JSON response
-        serde_json::from_str(&body_text)
-            .with_context(|| format!("Failed to parse JSON response. Status: {}, Body: {}", status, body_text))?
-    };
+
+            if json_data.is_empty() {
+                return Err(anyhow::anyhow!("No data found in SSE response"));
+            }
+
+            serde_json::from_str(&json_data).with_context(|| {
+                format!("Failed to parse SSE JSON data. Status: {status}, Data: {json_data}")
+            })?
+        } else {
+            // Handle regular JSON response
+            serde_json::from_str(&body_text).with_context(|| {
+                format!("Failed to parse JSON response. Status: {status}, Body: {body_text}")
+            })?
+        };
 
     // Decode Unicode escapes in the response content
     if let Some(result) = json_response.get_mut("result") {
@@ -290,14 +306,17 @@ async fn proxy_mcp_request_http(client: &Client, base_url: &str, req: MCPRequest
     }
 
     if !status.is_success() {
-        eprintln!("[!] MCP server returned error: {}", status);
-        eprintln!("[!] Response body: {}", body_text);
+        eprintln!("[!] MCP server returned error: {status}");
+        eprintln!("[!] Response body: {body_text}");
     }
 
     Ok(json_response)
 }
 
-async fn proxy_mcp_request_stdio(stdio_client: &mut StdioMcpClient, req: MCPRequest) -> Result<serde_json::Value> {
+async fn proxy_mcp_request_stdio(
+    stdio_client: &mut StdioMcpClient,
+    req: MCPRequest,
+) -> Result<serde_json::Value> {
     // Create JSON-RPC request
     let rpc_request = JsonRpcRequest {
         jsonrpc: "2.0".to_string(),
@@ -305,17 +324,20 @@ async fn proxy_mcp_request_stdio(stdio_client: &mut StdioMcpClient, req: MCPRequ
         method: req.method.clone(),
         params: Some(req.params.clone()),
     };
-    
+
     let request_json = serde_json::to_string(&rpc_request)?;
     let response_json = stdio_client.send_request(&request_json).await?;
-    
+
     let json_response: serde_json::Value = serde_json::from_str(&response_json)
-        .with_context(|| format!("Failed to parse JSON response: {}", response_json))?;
-    
+        .with_context(|| format!("Failed to parse JSON response: {response_json}"))?;
+
     Ok(json_response)
 }
 
-async fn proxy_mcp_request_named_pipe(pipe_client: &NamedPipeMcpClient, req: MCPRequest) -> Result<serde_json::Value> {
+async fn proxy_mcp_request_named_pipe(
+    pipe_client: &NamedPipeMcpClient,
+    req: MCPRequest,
+) -> Result<serde_json::Value> {
     // Create JSON-RPC request
     let rpc_request = JsonRpcRequest {
         jsonrpc: "2.0".to_string(),
@@ -323,13 +345,13 @@ async fn proxy_mcp_request_named_pipe(pipe_client: &NamedPipeMcpClient, req: MCP
         method: req.method.clone(),
         params: Some(req.params.clone()),
     };
-    
+
     let request_json = serde_json::to_string(&rpc_request)?;
     let response_json = pipe_client.send_request(&request_json).await?;
-    
+
     let json_response: serde_json::Value = serde_json::from_str(&response_json)
-        .with_context(|| format!("Failed to parse JSON response: {}", response_json))?;
-    
+        .with_context(|| format!("Failed to parse JSON response: {response_json}"))?;
+
     Ok(json_response)
 }
 
@@ -355,24 +377,29 @@ async fn main() -> Result<()> {
 
     if args.verbose {
         eprintln!("[INFO] Starting MCP proxy tool");
-        eprintln!("[INFO] Transport mode: {:?}", transport_mode);
+        eprintln!("[INFO] Transport mode: {transport_mode:?}");
         match &transport_mode {
             TransportMode::Http => {
                 eprintln!("[INFO] Target MCP server: {}", args.url.as_ref().unwrap());
             }
             TransportMode::Stdio => {
                 let cmd_args = args.args.as_deref().unwrap_or("");
-                eprintln!("[INFO] Target MCP command: {} {}", 
+                eprintln!(
+                    "[INFO] Target MCP command: {} {}",
                     args.command.as_ref().unwrap(),
-                    cmd_args);
+                    cmd_args
+                );
             }
             TransportMode::NamedPipe => {
-                eprintln!("[INFO] Target MCP named pipe: {}", args.pipe.as_ref().unwrap());
+                eprintln!(
+                    "[INFO] Target MCP named pipe: {}",
+                    args.pipe.as_ref().unwrap()
+                );
             }
         }
         eprintln!("[INFO] Timeout: {} seconds", args.timeout);
     }
-    
+
     let client = Client::builder()
         .timeout(std::time::Duration::from_secs(args.timeout))
         .build()
@@ -385,7 +412,10 @@ async fn main() -> Result<()> {
         let cmd_args: Vec<String> = if cmd_args_str.is_empty() {
             Vec::new()
         } else {
-            cmd_args_str.split_whitespace().map(|s| s.to_string()).collect()
+            cmd_args_str
+                .split_whitespace()
+                .map(|s| s.to_string())
+                .collect()
         };
         Some(StdioMcpClient::new(command, &cmd_args).await?)
     } else {
@@ -399,31 +429,31 @@ async fn main() -> Result<()> {
     } else {
         None
     };
-    
+
     let stdin = io::stdin();
     let reader = BufReader::new(stdin);
-    
+
     for line in reader.lines() {
         let line = line.context("Failed to read line from stdin")?;
         let line = line.trim();
-        
+
         if line.is_empty() {
             continue;
         }
-        
+
         if args.verbose {
-            eprintln!("[DEBUG] Received request: {}", line);
+            eprintln!("[DEBUG] Received request: {line}");
         }
-        
+
         // Parse the JSON-RPC request
-        let request: JsonRpcRequest = match serde_json::from_str(&line) {
+        let request: JsonRpcRequest = match serde_json::from_str(line) {
             Ok(req) => req,
             Err(e) => {
-                eprintln!("[!] Failed to parse JSON-RPC request: {}", e);
+                eprintln!("[!] Failed to parse JSON-RPC request: {e}");
                 continue;
             }
         };
-        
+
         // Handle different MCP methods
         match request.method.as_str() {
             "initialize" => {
@@ -462,13 +492,19 @@ async fn main() -> Result<()> {
                 if args.verbose {
                     match &transport_mode {
                         TransportMode::Http => {
-                            eprintln!("[INFO] Proxying tools/list request to {}", args.url.as_ref().unwrap());
+                            eprintln!(
+                                "[INFO] Proxying tools/list request to {}",
+                                args.url.as_ref().unwrap()
+                            );
                         }
                         TransportMode::Stdio => {
                             eprintln!("[INFO] Proxying tools/list request to STDIO command");
                         }
                         TransportMode::NamedPipe => {
-                            eprintln!("[INFO] Proxying tools/list request to named pipe: {}", args.pipe.as_ref().unwrap());
+                            eprintln!(
+                                "[INFO] Proxying tools/list request to named pipe: {}",
+                                args.pipe.as_ref().unwrap()
+                            );
                         }
                     }
                 }
@@ -477,7 +513,7 @@ async fn main() -> Result<()> {
                     method: "tools/list".to_string(),
                     params: serde_json::Value::Object(serde_json::Map::new()),
                 };
-                
+
                 let proxy_result = match &transport_mode {
                     TransportMode::Http => {
                         proxy_mcp_request_http(&client, args.url.as_ref().unwrap(), mcp_req).await
@@ -489,7 +525,7 @@ async fn main() -> Result<()> {
                         proxy_mcp_request_named_pipe(pipe_client.as_ref().unwrap(), mcp_req).await
                     }
                 };
-                
+
                 match proxy_result {
                     Ok(result) => {
                         // Extract the inner result from the server response
@@ -498,7 +534,7 @@ async fn main() -> Result<()> {
                         } else {
                             result
                         };
-                        
+
                         let response = JsonRpcResponse {
                             jsonrpc: "2.0".to_string(),
                             id: request.id,
@@ -509,7 +545,7 @@ async fn main() -> Result<()> {
                     }
                     Err(e) => {
                         if args.verbose {
-                            eprintln!("[ERROR] tools/list request failed: {}", e);
+                            eprintln!("[ERROR] tools/list request failed: {e}");
                         }
                         let response = JsonRpcResponse {
                             jsonrpc: "2.0".to_string(),
@@ -517,7 +553,7 @@ async fn main() -> Result<()> {
                             result: None,
                             error: Some(serde_json::json!({
                                 "code": -32603,
-                                "message": format!("Internal error: {}", e)
+                                "message": format!("Internal error: {e}")
                             })),
                         };
                         println!("{}", serde_json::to_string(&response)?);
@@ -528,13 +564,19 @@ async fn main() -> Result<()> {
                 if args.verbose {
                     match &transport_mode {
                         TransportMode::Http => {
-                            eprintln!("[INFO] Proxying tools/call request to {}", args.url.as_ref().unwrap());
+                            eprintln!(
+                                "[INFO] Proxying tools/call request to {}",
+                                args.url.as_ref().unwrap()
+                            );
                         }
                         TransportMode::Stdio => {
                             eprintln!("[INFO] Proxying tools/call request to STDIO command");
                         }
                         TransportMode::NamedPipe => {
-                            eprintln!("[INFO] Proxying tools/call request to named pipe: {}", args.pipe.as_ref().unwrap());
+                            eprintln!(
+                                "[INFO] Proxying tools/call request to named pipe: {}",
+                                args.pipe.as_ref().unwrap()
+                            );
                         }
                     }
                 }
@@ -543,7 +585,7 @@ async fn main() -> Result<()> {
                     method: "tools/call".to_string(),
                     params: request.params.unwrap_or_default(),
                 };
-                
+
                 let proxy_result = match &transport_mode {
                     TransportMode::Http => {
                         proxy_mcp_request_http(&client, args.url.as_ref().unwrap(), mcp_req).await
@@ -555,7 +597,7 @@ async fn main() -> Result<()> {
                         proxy_mcp_request_named_pipe(pipe_client.as_ref().unwrap(), mcp_req).await
                     }
                 };
-                
+
                 match proxy_result {
                     Ok(result) => {
                         // Extract the inner result from the server response
@@ -564,7 +606,7 @@ async fn main() -> Result<()> {
                         } else {
                             result
                         };
-                        
+
                         let response = JsonRpcResponse {
                             jsonrpc: "2.0".to_string(),
                             id: request.id,
@@ -575,7 +617,7 @@ async fn main() -> Result<()> {
                     }
                     Err(e) => {
                         if args.verbose {
-                            eprintln!("[ERROR] tools/call request failed: {}", e);
+                            eprintln!("[ERROR] tools/call request failed: {e}");
                         }
                         let response = JsonRpcResponse {
                             jsonrpc: "2.0".to_string(),
@@ -583,7 +625,7 @@ async fn main() -> Result<()> {
                             result: None,
                             error: Some(serde_json::json!({
                                 "code": -32603,
-                                "message": format!("Internal error: {}", e)
+                                "message": format!("Internal error: {e}")
                             })),
                         };
                         println!("{}", serde_json::to_string(&response)?);
@@ -592,22 +634,24 @@ async fn main() -> Result<()> {
             }
             _ => {
                 if args.verbose {
-                    eprintln!("[WARN] Unknown method: {}", request.method);
+                    let method = &request.method;
+                    eprintln!("[WARN] Unknown method: {method}");
                 }
                 // Unknown method
+                let method = &request.method;
                 let response = JsonRpcResponse {
                     jsonrpc: "2.0".to_string(),
                     id: request.id,
                     result: None,
                     error: Some(serde_json::json!({
                         "code": -32601,
-                        "message": format!("Method not found: {}", request.method)
+                        "message": format!("Method not found: {method}")
                     })),
                 };
                 println!("{}", serde_json::to_string(&response)?);
             }
         }
     }
-    
+
     Ok(())
 }
