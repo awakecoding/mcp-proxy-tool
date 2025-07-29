@@ -8,7 +8,10 @@ fn main() {
             .set("ProductVersion", &version)
             .set("CompanyName", "AwakeCoding")
             .set("ProductName", "mcp-proxy-tool")
-            .set("FileDescription", "mcp-proxy-tool - Model Context Protocol Proxy Tool")
+            .set(
+                "FileDescription",
+                "mcp-proxy-tool - Model Context Protocol Proxy Tool",
+            )
             .set("LegalCopyright", "Copyright © 2025 AwakeCoding");
         res.compile().expect("Failed to compile Windows resources");
     }
