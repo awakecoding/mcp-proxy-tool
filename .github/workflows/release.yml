@@ -79,13 +79,11 @@ jobs:
         )
         foreach ($platform in $platforms) {
           $artifactName = "mcp-proxy-tool-$($platform.name)"
-          $artifactPath = "artifacts/$artifactName/$artifactName"
-          # If the artifact is not found, try with .exe for Windows
-          if (!(Test-Path $artifactPath) -and ($platform.name -like "*windows*")) {
-            $artifactPathExe = "artifacts/$artifactName/$artifactName.exe"
-            if (Test-Path $artifactPathExe) {
-              $artifactPath = $artifactPathExe
-            }
+          $isWindows = $platform.name -like "*windows*"
+          $artifactPath = if ($isWindows) {
+            "artifacts/$artifactName/mcp-proxy-tool.exe"
+          } else {
+            "artifacts/$artifactName/mcp-proxy-tool"
           }
           if (Test-Path $artifactPath) {
             Write-Host "Processing $($platform.name)..."
@@ -93,10 +91,7 @@ jobs:
             $stagingDir = "staging/$($platform.name)"
             New-Item -ItemType Directory -Path $stagingDir -Force | Out-Null
             # Always copy as 'mcp-proxy-tool' (with .exe for Windows)
-            $binaryName = "mcp-proxy-tool"
-            if ($platform.name -like "*windows*") {
-              $binaryName += ".exe"
-            }
+            $binaryName = if ($isWindows) { "mcp-proxy-tool.exe" } else { "mcp-proxy-tool" }
             # Remove any existing file with the target name
             if (Test-Path "$stagingDir/$binaryName") { Remove-Item "$stagingDir/$binaryName" -Force }
             Copy-Item $artifactPath "$stagingDir/$binaryName"
@@ -166,15 +161,14 @@ jobs:
         $bodyFile = "release-body.md"
         $body | Out-File -FilePath $bodyFile -Encoding UTF8
         
-        $assetArgs = $assets | ForEach-Object { "--attach", $_ }
-        
+        # Pass assets as positional arguments (not --attach)
         if ("${{ github.event.inputs.dry-run }}" -eq "true") {
           Write-Host "[DRY RUN] Would create release with tag: ${{ steps.tag.outputs.tag }}"
           Write-Host "[DRY RUN] Assets: $assets"
           Write-Host "[DRY RUN] Release notes:"
           Get-Content $bodyFile | Write-Host
         } else {
-          gh release create "${{ steps.tag.outputs.tag }}" @assetArgs `
+          gh release create "${{ steps.tag.outputs.tag }}" $assets `
             --title "Release ${{ steps.tag.outputs.tag }}" `
             --notes-file $bodyFile
           Write-Host "✓ Release created successfully!"
