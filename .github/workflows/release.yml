@@ -129,6 +129,23 @@ jobs:
         } | Out-File -FilePath "../checksums.txt" -Encoding UTF8
         Pop-Location
 
+    - name: List release artifacts and print checksums.txt
+      shell: pwsh
+      run: |
+        Write-Host "Release ZIPs to be checksummed:"
+        Get-ChildItem release -Include "*.zip" | ForEach-Object { Write-Host $_.FullName }
+        Write-Host "\nContents of checksums.txt:"
+        if (Test-Path "checksums.txt") {
+          $content = Get-Content "checksums.txt"
+          if ($content) {
+            $content | Write-Host
+          } else {
+            Write-Host "checksums.txt is empty!"
+          }
+        } else {
+          Write-Host "checksums.txt does not exist!"
+        }
+
     - name: Create Release (or Dry Run)
       shell: pwsh
       run: |
