@@ -70,26 +70,26 @@ jobs:
         foreach ($platform in $platforms) {
           $artifactName = "mcp-proxy-tool-$($platform.name)"
           $artifactPath = "artifacts/$artifactName/$artifactName"
-          
+
           if (Test-Path $artifactPath) {
             Write-Host "Processing $($platform.name)..."
-            
+
             # Create staging directory
             $stagingDir = "staging/$($platform.name)"
             New-Item -ItemType Directory -Path $stagingDir -Force | Out-Null
-            
-            # Copy binary (add .exe for Windows)
+
+            # Always copy as 'mcp-proxy-tool' (with .exe for Windows)
             $binaryName = "mcp-proxy-tool"
             if ($platform.name -like "*windows*") {
               $binaryName += ".exe"
             }
             Copy-Item $artifactPath "$stagingDir/$binaryName"
-            
+
             # Copy additional files
             if (Test-Path "README.md") { Copy-Item "README.md" "$stagingDir/" }
             if (Test-Path "LICENSE") { Copy-Item "LICENSE*" "$stagingDir/" }
-            
-            # Create archive
+
+            # Create archive with explicit name, but generic binary inside
             $archiveName = "mcp-proxy-tool-$($platform.name)"
             if ($IsWindows) {
               7z a "release/$archiveName.zip" "$stagingDir/*"
@@ -98,8 +98,8 @@ jobs:
               zip -r "../../release/$archiveName.zip" *
               Pop-Location
             }
-            
-            Write-Host "✓ Created release/$archiveName.zip"
+
+            Write-Host "✓ Created release/$archiveName.zip (contains $binaryName)"
           } else {
             Write-Host "⚠ Artifact not found: $artifactPath"
           }
