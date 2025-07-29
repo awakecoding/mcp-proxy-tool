@@ -79,7 +79,6 @@ jobs:
         )
         foreach ($platform in $platforms) {
           $artifactName = "mcp-proxy-tool-$($platform.name)"
-          $isWindows = $platform.name -like "*windows*"
           $artifactPath = if ($isWindows) {
             "artifacts/$artifactName/mcp-proxy-tool.exe"
           } else {
