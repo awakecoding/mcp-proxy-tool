@@ -7,8 +7,8 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag to release'
-        required: true
+        description: 'Tag to release (default: vYYYY.M.D for today)'
+        required: false
         type: string
       dry-run:
         description: 'Dry run (do not create GitHub release, just print what would be released)'
@@ -46,11 +46,18 @@ jobs:
       shell: pwsh
       run: |
         if ("${{ github.event_name }}" -eq "workflow_dispatch") {
-          "tag=${{ github.event.inputs.tag }}" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          $inputTag = "${{ github.event.inputs.tag }}"
+          if ([string]::IsNullOrWhiteSpace($inputTag)) {
+            $now = Get-Date
+            $version = $now.ToString('yyyy.M.d')
+            $tag = "v$version"
+          } else {
+            $tag = $inputTag
+          }
+          "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
         } else {
           $tag = "${{ github.ref }}" -replace "refs/tags/", ""
           "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-
         }
 
 

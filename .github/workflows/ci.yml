@@ -206,8 +206,12 @@ jobs:
           default { "mcp-proxy-tool-$target" }
         }
         
-        Write-Host "Copying $binaryPath to artifacts/$artifactName"
-        Copy-Item $binaryPath "artifacts/$artifactName"
+        # Create a subdirectory for the artifact
+        $artifactDir = "artifacts/$artifactName"
+        New-Item -ItemType Directory -Force -Path $artifactDir | Out-Null
+        $destFile = Join-Path $artifactDir ([System.IO.Path]::GetFileName($binaryPath))
+        Write-Host "Copying $binaryPath to $destFile"
+        Copy-Item $binaryPath $destFile
         
         # Output for next step
         echo "artifact-name=$artifactName" >> $env:GITHUB_OUTPUT
