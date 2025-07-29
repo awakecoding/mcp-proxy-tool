@@ -57,6 +57,9 @@ jobs:
     - name: Create release archives
       shell: pwsh
       run: |
+    - name: Create release archives
+      shell: pwsh
+      run: |
         New-Item -ItemType Directory -Path "release" -Force | Out-Null
         # Process each platform's artifacts
         $platforms = @(
@@ -90,8 +93,6 @@ jobs:
             # Remove any existing file with the target name
             if (Test-Path "$stagingDir/$binaryName") { Remove-Item "$stagingDir/$binaryName" -Force }
             Copy-Item $artifactPath "$stagingDir/$binaryName"
-            # Do not copy README.md or LICENSE; only include the executable in the zip
-            # Create archive with explicit name, but generic binary inside
             $archiveName = "mcp-proxy-tool-$($platform.name)"
             if ($IsWindows) {
               7z a "release/$archiveName.zip" "$stagingDir/*"
