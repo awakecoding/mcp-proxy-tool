@@ -50,6 +50,15 @@ jobs:
             arch: arm64
 
     steps:
+    - name: preflight
+      id: preflight
+      shell: bash
+      run: |
+        if [[ -n "${{ github.event.inputs.version }}" ]]; then
+          echo "MCP_VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
+        else
+          echo "MCP_VERSION=$(date +'%Y.%m.%d')" >> $GITHUB_ENV
+        fi
     - name: Checkout
       uses: actions/checkout@v4
 
@@ -96,10 +105,21 @@ jobs:
     - name: Build
       shell: pwsh
       run: |
+        $env:MCP_VERSION = "$env:MCP_VERSION"
         if ("${{ inputs.release_mode }}" -eq "true") {
-          cargo build --release --verbose --target ${{ matrix.target }}
+          if ($IsWindows) {
+            $env:MCP_VERSION = $env:MCP_VERSION
+            cargo build --release --verbose --target ${{ matrix.target }}
+          } else {
+            cargo build --release --verbose --target ${{ matrix.target }}
+          }
         } else {
-          cargo build --verbose --target ${{ matrix.target }}
+          if ($IsWindows) {
+            $env:MCP_VERSION = $env:MCP_VERSION
+            cargo build --verbose --target ${{ matrix.target }}
+          } else {
+            cargo build --verbose --target ${{ matrix.target }}
+          }
         }
 
     - name: Run tests

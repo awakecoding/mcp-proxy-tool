@@ -10,6 +10,11 @@ on:
         description: 'Tag to release'
         required: true
         type: string
+      dry-run:
+        description: 'Dry run (do not create GitHub release, just print what would be released)'
+        required: false
+        default: false
+        type: boolean
 
 env:
   CARGO_TERM_COLOR: always
@@ -110,7 +115,7 @@ jobs:
         } | Out-File -FilePath "../checksums.txt" -Encoding UTF8
         Pop-Location
 
-    - name: Create Release
+    - name: Create Release (or Dry Run)
       shell: pwsh
       run: |
         # Prepare release assets
@@ -140,16 +145,22 @@ jobs:
                 "### Checksums`n`n" +
                 "See ``checksums.txt`` for SHA256 verification.`n"
         
-        # Create the release
+        # Create the release body file
         $bodyFile = "release-body.md"
         $body | Out-File -FilePath $bodyFile -Encoding UTF8
         
         $assetArgs = $assets | ForEach-Object { "--attach", $_ }
         
-        gh release create "${{ steps.tag.outputs.tag }}" @assetArgs `
-          --title "Release ${{ steps.tag.outputs.tag }}" `
-          --notes-file $bodyFile
-        
-        Write-Host "✓ Release created successfully!"
+        if ("${{ github.event.inputs.dry-run }}" -eq "true") {
+          Write-Host "[DRY RUN] Would create release with tag: ${{ steps.tag.outputs.tag }}"
+          Write-Host "[DRY RUN] Assets: $assets"
+          Write-Host "[DRY RUN] Release notes:"
+          Get-Content $bodyFile | Write-Host
+        } else {
+          gh release create "${{ steps.tag.outputs.tag }}" @assetArgs `
+            --title "Release ${{ steps.tag.outputs.tag }}" `
+            --notes-file $bodyFile
+          Write-Host "✓ Release created successfully!"
+        }
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
