@@ -12,7 +12,7 @@ A high-performance MCP (Model Context Protocol) proxy tool written in Rust that 
 - **High Performance**: Built in Rust with async/await for optimal performance
 - **Configurable Timeouts**: Adjustable timeout settings for HTTP requests
 - **Verbose Logging**: Optional detailed logging for debugging and monitoring
-- **Cross-Platform**: Supports Windows, macOS, and Linux
+- **Cross-Platform**: Supports Windows, macOS, and Linux (x86_64 and ARM64 architectures)
 
 ## Installation
 
@@ -23,7 +23,7 @@ Download the latest release for your platform from the [GitHub Releases](https:/
 #### Windows
 
 **Option 1: Direct Download**
-1. Download `mcp-proxy-tool-x86_64-pc-windows-msvc.zip` (Intel/AMD) or `mcp-proxy-tool-aarch64-pc-windows-msvc.zip` (ARM64)
+1. Download `mcp-proxy-tool-windows-x64.zip` (Intel/AMD) or `mcp-proxy-tool-windows-arm64.zip` (ARM64)
 2. Extract the ZIP file
 3. Add the extracted directory to your PATH or run directly
 
@@ -35,8 +35,8 @@ winget install awakecoding.mcp-proxy-tool
 #### macOS
 
 **Option 1: Direct Download**
-1. Download `mcp-proxy-tool-x86_64-apple-darwin.tar.gz` (Intel) or `mcp-proxy-tool-aarch64-apple-darwin.tar.gz` (Apple Silicon)
-2. Extract: `tar -xzf mcp-proxy-tool-*.tar.gz`
+1. Download `mcp-proxy-tool-macos-x64.zip` (Intel) or `mcp-proxy-tool-macos-arm64.zip` (Apple Silicon)
+2. Extract: `unzip mcp-proxy-tool-*.zip`
 3. Move to PATH: `sudo mv mcp-proxy-tool /usr/local/bin/`
 
 **Option 2: Homebrew (Coming Soon)**
@@ -48,8 +48,8 @@ brew install mcp-proxy-tool
 #### Linux
 
 **Direct Download**
-1. Download `mcp-proxy-tool-x86_64-unknown-linux-gnu.tar.gz` (x86_64) or `mcp-proxy-tool-aarch64-unknown-linux-gnu.tar.gz` (ARM64)
-2. Extract: `tar -xzf mcp-proxy-tool-*.tar.gz`
+1. Download `mcp-proxy-tool-linux-x64.zip` (x86_64) or `mcp-proxy-tool-linux-arm64.zip` (ARM64)
+2. Extract: `unzip mcp-proxy-tool-*.zip`
 3. Move to PATH: `sudo mv mcp-proxy-tool /usr/local/bin/`
 
 ### From Source
@@ -561,14 +561,17 @@ cargo build --release
 ### Cross-Platform Builds
 
 ```bash
-# Build for Windows from Unix/Linux/macOS
+# Build for Windows (Intel/AMD and ARM64)
 cargo build --release --target x86_64-pc-windows-msvc
+cargo build --release --target aarch64-pc-windows-msvc
 
-# Build for Linux from Windows/macOS
+# Build for Linux (x86_64 and ARM64)
 cargo build --release --target x86_64-unknown-linux-gnu
+cargo build --release --target aarch64-unknown-linux-gnu
 
-# Build for macOS from Windows/Linux (requires macOS SDK)
+# Build for macOS (Intel and Apple Silicon)
 cargo build --release --target x86_64-apple-darwin
+cargo build --release --target aarch64-apple-darwin
 ```
 
 ## Transport Modes

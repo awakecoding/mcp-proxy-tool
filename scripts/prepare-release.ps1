@@ -26,10 +26,10 @@ New-Item -ItemType Directory -Path $TempDir -Force | Out-Null
 $Artifacts = @(
     "windows-x64.zip",
     "windows-arm64.zip", 
-    "macos-x64.tar.gz",
-    "macos-arm64.tar.gz",
-    "linux-x64.tar.gz",
-    "linux-arm64.tar.gz"
+    "macos-x64.zip",
+    "macos-arm64.zip",
+    "linux-x64.zip",
+    "linux-arm64.zip"
 )
 
 # Download artifacts and calculate checksums
@@ -83,10 +83,10 @@ if (Test-Path "packaging\homebrew-formula-template.rb") {
     $homebrewContent = Get-Content "packaging\homebrew-formula-template.rb" -Raw
     
     $homebrewContent = $homebrewContent -replace '\{VERSION\}', $Version
-    $homebrewContent = $homebrewContent -replace '\{SHA256_MACOS_X64\}', $Checksums["macos-x64.tar.gz"]
-    $homebrewContent = $homebrewContent -replace '\{SHA256_MACOS_ARM64\}', $Checksums["macos-arm64.tar.gz"]
-    $homebrewContent = $homebrewContent -replace '\{SHA256_LINUX_X64\}', $Checksums["linux-x64.tar.gz"]
-    $homebrewContent = $homebrewContent -replace '\{SHA256_LINUX_ARM64\}', $Checksums["linux-arm64.tar.gz"]
+    $homebrewContent = $homebrewContent -replace '\{SHA256_MACOS_X64\}', $Checksums["macos-x64.zip"]
+    $homebrewContent = $homebrewContent -replace '\{SHA256_MACOS_ARM64\}', $Checksums["macos-arm64.zip"]
+    $homebrewContent = $homebrewContent -replace '\{SHA256_LINUX_X64\}', $Checksums["linux-x64.zip"]
+    $homebrewContent = $homebrewContent -replace '\{SHA256_LINUX_ARM64\}', $Checksums["linux-arm64.zip"]
     
     Set-Content -Path $HomebrewFormula -Value $homebrewContent
     Write-Host "✓ Homebrew formula created: $HomebrewFormula" -ForegroundColor Green
