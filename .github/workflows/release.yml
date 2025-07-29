@@ -50,7 +50,15 @@ jobs:
         } else {
           $tag = "${{ github.ref }}" -replace "refs/tags/", ""
           "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
         }
+
+    - name: Upload release zips as artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: release-zips
+        path: release/*.zip
+        retention-days: 7
 
     - name: Create release archives
       shell: pwsh
@@ -70,6 +78,13 @@ jobs:
         foreach ($platform in $platforms) {
           $artifactName = "mcp-proxy-tool-$($platform.name)"
           $artifactPath = "artifacts/$artifactName/$artifactName"
+          # If the artifact is not found, try with .exe for Windows
+          if (!(Test-Path $artifactPath) -and ($platform.name -like "*windows*")) {
+            $artifactPathExe = "artifacts/$artifactName/$artifactName.exe"
+            if (Test-Path $artifactPathExe) {
+              $artifactPath = $artifactPathExe
+            }
+          }
 
           if (Test-Path $artifactPath) {
             Write-Host "Processing $($platform.name)..."
@@ -83,6 +98,8 @@ jobs:
             if ($platform.name -like "*windows*") {
               $binaryName += ".exe"
             }
+            # Remove any existing file with the target name
+            if (Test-Path "$stagingDir/$binaryName") { Remove-Item "$stagingDir/$binaryName" -Force }
             Copy-Item $artifactPath "$stagingDir/$binaryName"
 
             # Copy additional files
