@@ -188,8 +188,7 @@ jobs:
         $binaryPath = "target/$target/$buildMode/mcp-proxy-tool"
         
         # Add .exe extension for Windows
-        $isWindows = $target -like "*windows*"
-        if ($isWindows) {
+        if ($IsWindows) {
           $binaryPath += ".exe"
         }
         
@@ -211,7 +210,7 @@ jobs:
         $artifactDir = "artifacts/$artifactName"
         New-Item -ItemType Directory -Force -Path $artifactDir | Out-Null
         # Always use 'mcp-proxy-tool' or 'mcp-proxy-tool.exe' as the file name inside the artifact dir
-        $destFile = if ($isWindows) { Join-Path $artifactDir "mcp-proxy-tool.exe" } else { Join-Path $artifactDir "mcp-proxy-tool" }
+        $destFile = if ($IsWindows) { Join-Path $artifactDir "mcp-proxy-tool.exe" } else { Join-Path $artifactDir "mcp-proxy-tool" }
         Write-Host "Copying $binaryPath to $destFile"
         Copy-Item $binaryPath $destFile
         
