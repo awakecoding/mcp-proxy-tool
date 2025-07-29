@@ -90,9 +90,7 @@ jobs:
             # Remove any existing file with the target name
             if (Test-Path "$stagingDir/$binaryName") { Remove-Item "$stagingDir/$binaryName" -Force }
             Copy-Item $artifactPath "$stagingDir/$binaryName"
-            # Copy additional files
-            if (Test-Path "README.md") { Copy-Item "README.md" "$stagingDir/" }
-            if (Test-Path "LICENSE") { Copy-Item "LICENSE*" "$stagingDir/" }
+            # Do not copy README.md or LICENSE; only include the executable in the zip
             # Create archive with explicit name, but generic binary inside
             $archiveName = "mcp-proxy-tool-$($platform.name)"
             if ($IsWindows) {
@@ -115,67 +113,6 @@ jobs:
         path: release/*.zip
         retention-days: 7
 
-    - name: Create release archives
-      shell: pwsh
-      run: |
-        New-Item -ItemType Directory -Path "release" -Force | Out-Null
-        
-        # Process each platform's artifacts
-        $platforms = @(
-          @{ name = "linux-x64"; archive = "zip" },
-          @{ name = "linux-arm64"; archive = "zip" },
-          @{ name = "windows-x64"; archive = "zip" },
-          @{ name = "windows-arm64"; archive = "zip" },
-          @{ name = "macos-x64"; archive = "zip" },
-          @{ name = "macos-arm64"; archive = "zip" }
-        )
-        
-        foreach ($platform in $platforms) {
-          $artifactName = "mcp-proxy-tool-$($platform.name)"
-          $artifactPath = "artifacts/$artifactName/$artifactName"
-          # If the artifact is not found, try with .exe for Windows
-          if (!(Test-Path $artifactPath) -and ($platform.name -like "*windows*")) {
-            $artifactPathExe = "artifacts/$artifactName/$artifactName.exe"
-            if (Test-Path $artifactPathExe) {
-              $artifactPath = $artifactPathExe
-            }
-          }
-
-          if (Test-Path $artifactPath) {
-            Write-Host "Processing $($platform.name)..."
-
-            # Create staging directory
-            $stagingDir = "staging/$($platform.name)"
-            New-Item -ItemType Directory -Path $stagingDir -Force | Out-Null
-
-            # Always copy as 'mcp-proxy-tool' (with .exe for Windows)
-            $binaryName = "mcp-proxy-tool"
-            if ($platform.name -like "*windows*") {
-              $binaryName += ".exe"
-            }
-            # Remove any existing file with the target name
-            if (Test-Path "$stagingDir/$binaryName") { Remove-Item "$stagingDir/$binaryName" -Force }
-            Copy-Item $artifactPath "$stagingDir/$binaryName"
-
-            # Copy additional files
-            if (Test-Path "README.md") { Copy-Item "README.md" "$stagingDir/" }
-            if (Test-Path "LICENSE") { Copy-Item "LICENSE*" "$stagingDir/" }
-
-            # Create archive with explicit name, but generic binary inside
-            $archiveName = "mcp-proxy-tool-$($platform.name)"
-            if ($IsWindows) {
-              7z a "release/$archiveName.zip" "$stagingDir/*"
-            } else {
-              Push-Location $stagingDir
-              zip -r "../../release/$archiveName.zip" *
-              Pop-Location
-            }
-
-            Write-Host "✓ Created release/$archiveName.zip (contains $binaryName)"
-          } else {
-            Write-Host "⚠ Artifact not found: $artifactPath"
-          }
-        }
 
     - name: Generate checksums
       shell: pwsh
