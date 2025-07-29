@@ -111,86 +111,39 @@ jobs:
           }
         }
 
-    - name: Upload release zips as artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: release-zips
-        path: release/*.zip
-        retention-days: 7
 
-
-    - name: Generate checksums
+    - name: Create GitHub release (all-in-one)
       shell: pwsh
-      run: |
-        Push-Location release
-        Get-ChildItem -Include "*.zip" | ForEach-Object {
-          $hash = Get-FileHash $_.FullName -Algorithm SHA256
-          "$($hash.Hash.ToLower())  $($_.Name)"
-        } | Out-File -FilePath "../checksums.txt" -Encoding UTF8
-        Pop-Location
-
-    - name: List release artifacts and print checksums.txt
-      shell: pwsh
-      run: |
-        Write-Host "Release ZIPs to be checksummed:"
-        Get-ChildItem release -Include "*.zip" | ForEach-Object { Write-Host $_.FullName }
-        Write-Host "\nContents of checksums.txt:"
-        if (Test-Path "checksums.txt") {
-          $content = Get-Content "checksums.txt"
-          if ($content) {
-            $content | Write-Host
-          } else {
-            Write-Host "checksums.txt is empty!"
-          }
-        } else {
-          Write-Host "checksums.txt does not exist!"
-        }
-
-    - name: Create Release (or Dry Run)
-      shell: pwsh
-      run: |
-        # Prepare release assets
-        $assets = Get-ChildItem release -Include "*.zip" | ForEach-Object { $_.FullName }
-        $assets += "checksums.txt"
-        
-        # Create release body
-        $body = "## MCP Proxy Tool ${{ steps.tag.outputs.tag }}`n`n" +
-                "Cross-platform MCP (Model Context Protocol) proxy tool that forwards requests to HTTP, STDIO, or named pipe-based MCP servers.`n`n" +
-                "### Installation`n`n" +
-                "Download the appropriate binary for your platform below.`n`n" +
-                "### Supported Platforms`n`n" +
-                "- **Windows**: x86_64, ARM64`n" +
-                "- **macOS**: Intel (x86_64), Apple Silicon (ARM64)`n" +
-                "- **Linux**: x86_64, ARM64`n`n" +
-                "### Usage`n`n" +
-                "``````bash`n" +
-                "# HTTP proxy`n" +
-                "mcp-proxy-tool -u https://example.com/mcp`n`n" +
-                "# STDIO proxy`n" +
-                "mcp-proxy-tool -c python -a `"mcp_server.py`"`n`n" +
-                "# Named pipe proxy (Windows)`n" +
-                "mcp-proxy-tool -p `"mcp-server-pipe`"`n`n" +
-                "# Named pipe proxy (Unix)`n" +
-                "mcp-proxy-tool -p `"/tmp/mcp-server.sock`"`n" +
-                "``````n`n" +
-                "### Checksums`n`n" +
-                "See ``checksums.txt`` for SHA256 verification.`n"
-        
-        # Create the release body file
-        $bodyFile = "release-body.md"
-        $body | Out-File -FilePath $bodyFile -Encoding UTF8
-        
-        # Pass assets as positional arguments (not --attach)
-        if ("${{ github.event.inputs.dry-run }}" -eq "true") {
-          Write-Host "[DRY RUN] Would create release with tag: ${{ steps.tag.outputs.tag }}"
-          Write-Host "[DRY RUN] Assets: $assets"
-          Write-Host "[DRY RUN] Release notes:"
-          Get-Content $bodyFile | Write-Host
-        } else {
-          gh release create "${{ steps.tag.outputs.tag }}" $assets `
-            --title "Release ${{ steps.tag.outputs.tag }}" `
-            --notes-file $bodyFile
-          Write-Host "✓ Release created successfully!"
-        }
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        # Download all artifacts to a single directory
+        mkdir release
+        $artifacts = Get-ChildItem -Recurse -Path artifacts -Include *.zip
+        foreach ($artifact in $artifacts) {
+          Copy-Item $artifact.FullName release/
+        }
+
+        # Generate checksums
+        Push-Location release
+        $Files = Get-ChildItem -File
+        $Files | ForEach-Object { Get-FileHash -Algorithm SHA256 $_.FullName } |
+          ForEach-Object { "$($_.Hash)  $(Split-Path $_.Path -Leaf)" } |
+          Out-File -FilePath "checksums.txt" -Encoding ASCII
+        Pop-Location
+
+        Write-Host "::group::checksums.txt"
+        Get-Content release/checksums.txt | Write-Host
+        Write-Host "::endgroup::"
+
+        $assets = Get-ChildItem release -File | ForEach-Object { $_.FullName }
+        $tag = "${{ steps.tag.outputs.tag }}"
+        $repo = $env:GITHUB_REPOSITORY
+        $dryRun = "${{ github.event.inputs.dry-run }}" -eq "true"
+
+        if ($dryRun) {
+          Write-Host "[DRY RUN] Would create release with tag: $tag"
+          Write-Host "[DRY RUN] Assets: $assets"
+        } else {
+          & gh release create $tag --repo $repo --title $tag $assets
+        }
