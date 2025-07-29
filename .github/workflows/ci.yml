@@ -50,6 +50,15 @@ jobs:
             arch: arm64
 
     steps:
+    - name: preflight
+      id: preflight
+      shell: bash
+      run: |
+        if [[ -n "${{ github.event.inputs.version }}" ]]; then
+          echo "MCP_VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
+        else
+          echo "MCP_VERSION=$(date +'%Y.%m.%d')" >> $GITHUB_ENV
+        fi
     - name: Checkout
       uses: actions/checkout@v4
 
@@ -96,10 +105,21 @@ jobs:
     - name: Build
       shell: pwsh
       run: |
+        $env:MCP_VERSION = "$env:MCP_VERSION"
         if ("${{ inputs.release_mode }}" -eq "true") {
-          cargo build --release --verbose --target ${{ matrix.target }}
+          if ($IsWindows) {
+            $env:MCP_VERSION = $env:MCP_VERSION
+            cargo build --release --verbose --target ${{ matrix.target }}
+          } else {
+            cargo build --release --verbose --target ${{ matrix.target }}
+          }
         } else {
-          cargo build --verbose --target ${{ matrix.target }}
+          if ($IsWindows) {
+            $env:MCP_VERSION = $env:MCP_VERSION
+            cargo build --verbose --target ${{ matrix.target }}
+          } else {
+            cargo build --verbose --target ${{ matrix.target }}
+          }
         }
 
     - name: Run tests
@@ -168,7 +188,7 @@ jobs:
         $binaryPath = "target/$target/$buildMode/mcp-proxy-tool"
         
         # Add .exe extension for Windows
-        if ($target -like "*windows*") {
+        if ($IsWindows) {
           $binaryPath += ".exe"
         }
         
@@ -186,8 +206,13 @@ jobs:
           default { "mcp-proxy-tool-$target" }
         }
         
-        Write-Host "Copying $binaryPath to artifacts/$artifactName"
-        Copy-Item $binaryPath "artifacts/$artifactName"
+        # Create a subdirectory for the artifact
+        $artifactDir = "artifacts/$artifactName"
+        New-Item -ItemType Directory -Force -Path $artifactDir | Out-Null
+        # Always use 'mcp-proxy-tool' or 'mcp-proxy-tool.exe' as the file name inside the artifact dir
+        $destFile = if ($IsWindows) { Join-Path $artifactDir "mcp-proxy-tool.exe" } else { Join-Path $artifactDir "mcp-proxy-tool" }
+        Write-Host "Copying $binaryPath to $destFile"
+        Copy-Item $binaryPath $destFile
         
         # Output for next step
         echo "artifact-name=$artifactName" >> $env:GITHUB_OUTPUT
