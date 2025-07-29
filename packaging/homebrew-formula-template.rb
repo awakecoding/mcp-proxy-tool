@@ -14,18 +14,18 @@ class McpProxyTool < Formula
   
   if OS.mac?
     if Hardware::CPU.arm?
-      url "https://github.com/awakecoding/mcp-proxy-tool/releases/download/v#{version}/mcp-proxy-tool-macos-arm64.tar.gz"
+      url "https://github.com/awakecoding/mcp-proxy-tool/releases/download/v#{version}/mcp-proxy-tool-macos-arm64.zip"
       sha256 "{SHA256_MACOS_ARM64}" # Replace with actual SHA256
     else
-      url "https://github.com/awakecoding/mcp-proxy-tool/releases/download/v#{version}/mcp-proxy-tool-macos-x64.tar.gz"
+      url "https://github.com/awakecoding/mcp-proxy-tool/releases/download/v#{version}/mcp-proxy-tool-macos-x64.zip"
       sha256 "{SHA256_MACOS_X64}" # Replace with actual SHA256
     end
   elsif OS.linux?
     if Hardware::CPU.arm?
-      url "https://github.com/awakecoding/mcp-proxy-tool/releases/download/v#{version}/mcp-proxy-tool-linux-arm64.tar.gz"
+      url "https://github.com/awakecoding/mcp-proxy-tool/releases/download/v#{version}/mcp-proxy-tool-linux-arm64.zip"
       sha256 "{SHA256_LINUX_ARM64}" # Replace with actual SHA256
     else
-      url "https://github.com/awakecoding/mcp-proxy-tool/releases/download/v#{version}/mcp-proxy-tool-linux-x64.tar.gz"
+      url "https://github.com/awakecoding/mcp-proxy-tool/releases/download/v#{version}/mcp-proxy-tool-linux-x64.zip"
       sha256 "{SHA256_LINUX_X64}" # Replace with actual SHA256
     end
   end
