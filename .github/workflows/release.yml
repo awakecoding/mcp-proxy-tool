@@ -78,8 +78,9 @@ jobs:
           @{ name = "macos-arm64"; archive = "zip" }
         )
         foreach ($platform in $platforms) {
+          $IsPlatformWindows = $platform.name -like "*windows*"
           $artifactName = "mcp-proxy-tool-$($platform.name)"
-          $artifactPath = if ($isWindows) {
+          $artifactPath = if ($IsPlatformWindows) {
             "artifacts/$artifactName/mcp-proxy-tool.exe"
           } else {
             "artifacts/$artifactName/mcp-proxy-tool"
@@ -90,12 +91,12 @@ jobs:
             $stagingDir = "staging/$($platform.name)"
             New-Item -ItemType Directory -Path $stagingDir -Force | Out-Null
             # Always copy as 'mcp-proxy-tool' (with .exe for Windows)
-            $binaryName = if ($isWindows) { "mcp-proxy-tool.exe" } else { "mcp-proxy-tool" }
+            $binaryName = if ($IsPlatformWindows) { "mcp-proxy-tool.exe" } else { "mcp-proxy-tool" }
             # Remove any existing file with the target name
             if (Test-Path "$stagingDir/$binaryName") { Remove-Item "$stagingDir/$binaryName" -Force }
             Copy-Item $artifactPath "$stagingDir/$binaryName"
             $archiveName = "mcp-proxy-tool-$($platform.name)"
-            if ($IsWindows) {
+            if ($IsPlatformWindows) {
               7z a "release/$archiveName.zip" "$stagingDir/*"
             } else {
               Push-Location $stagingDir
