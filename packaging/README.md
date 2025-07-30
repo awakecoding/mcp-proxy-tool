@@ -14,20 +14,25 @@ This directory contains templates and tools for distributing `mcp-proxy-tool` th
 - **Platforms**: Windows (ARM64/x64)
 - **Installation**: `winget install awakecoding.mcp-proxy-tool`
 
+### 🍫 Chocolatey (Windows)
+- **File**: `chocolatey-template.nuspec` + install/uninstall scripts
+- **Platforms**: Windows (ARM64/x64)
+- **Installation**: `choco install mcp-proxy-tool`
+
 ## 🛠️ Quick Update
 
 Use the automated script to update templates with new release information:
 
-```bash
+```powershell
 cd packaging/
-./update-packages.sh -v 0.1.0
+pwsh ./Update-Packages.ps1 -Version "0.1.0"
 ```
 
 This will:
 1. Download `checksums.txt` from the GitHub release
 2. Extract SHA256 values for all platforms
-3. Update both Homebrew and Winget templates
-4. Create backup files (.bak)
+3. Update Homebrew, Winget, and Chocolatey templates
+4. Generate release-specific manifests in `generated/` directory
 
 ## 📋 Manual Process
 
@@ -43,6 +48,13 @@ This will:
 2. Fork the [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs) repository
 3. Create manifest under `manifests/a/awakecoding/mcp-proxy-tool/{version}/`
 4. Submit a pull request
+
+### For Chocolatey
+
+1. Update the package templates with new version and checksums
+2. Create account at [chocolatey.org](https://chocolatey.org/)
+3. Test locally: `choco pack && choco install mcp-proxy-tool -source .`
+4. Push to Chocolatey: `choco push mcp-proxy-tool.{version}.nupkg`
 
 ## 🔍 Release Artifact Mapping
 
@@ -72,6 +84,14 @@ mcp-proxy-tool --help
 winget validate --manifest winget-manifest-template.yaml
 ```
 
+### Chocolatey Package
+```powershell
+# Test the package
+choco pack
+choco install mcp-proxy-tool -source .
+mcp-proxy-tool --help
+```
+
 ## 📝 Current Status
 
 - ✅ **Templates Updated**: Synced with v0.1.0 release artifacts
@@ -90,10 +110,11 @@ winget validate --manifest winget-manifest-template.yaml
 - [ ] Run release workflow with proper versioning
 
 ### After Release
-- [ ] Run `./update-packages.sh -v <VERSION>`
-- [ ] Review updated templates
+- [ ] Run `pwsh ./Update-Packages.ps1 -Version <VERSION>`
+- [ ] Review generated manifests in `generated/` directory
 - [ ] Create Homebrew tap (if first time)
 - [ ] Submit Winget manifest PR
+- [ ] Submit Chocolatey package
 - [ ] Test installations across platforms
 
 ## 📞 Support

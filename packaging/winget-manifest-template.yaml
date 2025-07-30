@@ -16,7 +16,7 @@
 # File: manifests/a/awakecoding/mcp-proxy-tool/{version}/awakecoding.mcp-proxy-tool.yaml
 
 PackageIdentifier: awakecoding.mcp-proxy-tool
-PackageVersion: "0.1.0" # Updated to current version from Cargo.toml
+PackageVersion: "{VERSION}" # Will be replaced by Update-Packages.ps1
 PackageLocale: en-US
 Publisher: awakecoding
 PublisherUrl: https://github.com/awakecoding
@@ -39,12 +39,12 @@ Tags:
 - model-context-protocol
 - json-rpc
 - http-proxy
-ReleaseDate: "2025-07-30" # YYYY-MM-DD format (e.g., 2025-07-30)
+ReleaseDate: "{RELEASE_DATE}" # Will be replaced by Update-Packages.ps1
 Installers:
 - Architecture: x64
   InstallerType: zip
-  InstallerUrl: https://github.com/awakecoding/mcp-proxy-tool/releases/download/v0.1.0/mcp-proxy-tool-windows-x64.zip
-  InstallerSha256: "66B21ADC208E36C21600BE69324052B62DC8037FAE749B4D4449A1179CDECCC8" # Replace with actual SHA256 from checksums.txt
+  InstallerUrl: https://github.com/awakecoding/mcp-proxy-tool/releases/download/v{VERSION}/mcp-proxy-tool-windows-x64.zip
+  InstallerSha256: "{SHA256_X64}" # Will be replaced by Update-Packages.ps1
   # Our release process ensures binary is at zip root level for easy extraction
   NestedInstallerType: portable
   NestedInstallerFiles:
@@ -52,8 +52,8 @@ Installers:
     PortableCommandAlias: mcp-proxy-tool
 - Architecture: arm64
   InstallerType: zip
-  InstallerUrl: https://github.com/awakecoding/mcp-proxy-tool/releases/download/v0.1.0/mcp-proxy-tool-windows-arm64.zip
-  InstallerSha256: "58D253F9831D935A2C97C89BC41C747304C86C618BBD111C492F1A4DC4416F71" # Replace with actual SHA256 from checksums.txt
+  InstallerUrl: https://github.com/awakecoding/mcp-proxy-tool/releases/download/v{VERSION}/mcp-proxy-tool-windows-arm64.zip
+  InstallerSha256: "{SHA256_ARM64}" # Will be replaced by Update-Packages.ps1
   # Our release process ensures binary is at zip root level for easy extraction
   NestedInstallerType: portable
   NestedInstallerFiles:

@@ -11,24 +11,24 @@
 class McpProxyTool < Formula
   desc "Cross-platform MCP (Model Context Protocol) proxy tool"
   homepage "https://github.com/awakecoding/mcp-proxy-tool"
-  version "0.1.0" # Updated to current version from Cargo.toml
+  version "{VERSION}" # Will be replaced by Update-Packages.ps1
   license "MIT"
   
   if OS.mac?
     if Hardware::CPU.arm?
       url "https://github.com/awakecoding/mcp-proxy-tool/releases/download/v#{version}/mcp-proxy-tool-macos-arm64.zip"
-      sha256 "29BCDA93DFE7462C021AEF1A1CE8853E9FC67858E970750B5677C00390BFFD92" # Replace with actual SHA256 from checksums.txt
+      sha256 "{SHA256_MACOS_ARM64}" # Will be replaced by Update-Packages.ps1
     else
       url "https://github.com/awakecoding/mcp-proxy-tool/releases/download/v#{version}/mcp-proxy-tool-macos-x64.zip"
-      sha256 "AEF7650E6FCBC6B8916E3386E4633E11EEA8B477190D09806824C98C789D0E14" # Replace with actual SHA256 from checksums.txt
+      sha256 "{SHA256_MACOS_X64}" # Will be replaced by Update-Packages.ps1
     end
   elsif OS.linux?
     if Hardware::CPU.arm?
       url "https://github.com/awakecoding/mcp-proxy-tool/releases/download/v#{version}/mcp-proxy-tool-linux-arm64.zip"
-      sha256 "C62339A639F1AD66F2D080796D3E802153AEC4E5FB8D5396CCFE1894D1AE6A3C" # Replace with actual SHA256 from checksums.txt
+      sha256 "{SHA256_LINUX_ARM64}" # Will be replaced by Update-Packages.ps1
     else
       url "https://github.com/awakecoding/mcp-proxy-tool/releases/download/v#{version}/mcp-proxy-tool-linux-x64.zip"
-      sha256 "1DBAD90AE2CE931AE075A6E30BC9A13E7267B64EB7AD766B0EA5210C5533A083" # Replace with actual SHA256 from checksums.txt
+      sha256 "{SHA256_LINUX_X64}" # Will be replaced by Update-Packages.ps1
     end
   else
     odie "Unsupported platform. For Windows, please use Winget: winget install awakecoding.mcp-proxy-tool"

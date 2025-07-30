@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Chocolatey Package Template for mcp-proxy-tool
+     
+     This template should be used to create a Chocolatey package submission.
+     Chocolatey is Windows-only. For macOS/Linux, see the Homebrew formula instead.
+     
+     Steps to publish to Chocolatey:
+     1. Create account at https://chocolatey.org/
+     2. Use this template to create a package
+     3. Test locally with: choco install mcp-proxy-tool -source .
+     4. Submit to Chocolatey community repository
+     
+     For updates: Run Update-Packages.ps1 to generate release-specific manifests
+-->
+<package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
+  <metadata>
+    <id>mcp-proxy-tool</id>
+    <version>{VERSION}</version> <!-- Will be replaced by Update-Packages.ps1 -->
+    <packageSourceUrl>https://github.com/awakecoding/mcp-proxy-tool/tree/master/packaging</packageSourceUrl>
+    <owners>awakecoding</owners>
+    <title>MCP Proxy Tool</title>
+    <authors>awakecoding</authors>
+    <projectUrl>https://github.com/awakecoding/mcp-proxy-tool</projectUrl>
+    <iconUrl>https://cdn.jsdelivr.net/gh/awakecoding/mcp-proxy-tool@master/icon.png</iconUrl>
+    <copyright>2025 awakecoding</copyright>
+    <licenseUrl>https://github.com/awakecoding/mcp-proxy-tool/blob/master/LICENSE</licenseUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <projectSourceUrl>https://github.com/awakecoding/mcp-proxy-tool</projectSourceUrl>
+    <docsUrl>https://github.com/awakecoding/mcp-proxy-tool#readme</docsUrl>
+    <bugTrackerUrl>https://github.com/awakecoding/mcp-proxy-tool/issues</bugTrackerUrl>
+    <tags>mcp proxy cli model-context-protocol json-rpc http-proxy portable</tags>
+    <summary>Cross-platform MCP (Model Context Protocol) proxy tool</summary>
+    <description>
+A command-line proxy tool that forwards Model Context Protocol (MCP) requests 
+to HTTP, STDIO, or named pipe-based MCP servers. Supports multiple transport 
+modes and cross-platform operation.
+
+## Features
+- HTTP-based MCP server proxy
+- STDIO-based MCP server proxy  
+- Named pipe-based MCP server proxy (Windows)
+- Cross-platform compatibility
+- JSON-RPC 2.0 protocol support
+- Configurable timeouts and logging
+
+## Usage
+```
+mcp-proxy-tool -u http://localhost:8080  # HTTP proxy
+mcp-proxy-tool -c "python server.py"    # STDIO proxy
+mcp-proxy-tool -p \\.\pipe\mcp          # Named pipe proxy (Windows)
+```
+
+This Windows package provides the native Windows executable with proper permissions and PATH integration.
+    </description>
+    <releaseNotes>https://github.com/awakecoding/mcp-proxy-tool/releases/tag/v{VERSION}</releaseNotes>
+  </metadata>
+  <files>
+    <file src="tools\**" target="tools" />
+  </files>
+</package>

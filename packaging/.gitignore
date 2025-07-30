@@ -1,0 +1,8 @@
+# Generated manifests - do not commit
+generated/
+
+# Backup files from old script
+*.bak
+
+# Temporary files
+*.tmp
