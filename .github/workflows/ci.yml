@@ -50,17 +50,18 @@ jobs:
             arch: arm64
 
     steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      
     - name: preflight
       id: preflight
       shell: bash
       run: |
-        if [[ -n "${{ github.event.inputs.version }}" ]]; then
-          echo "MCP_VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
-        else
-          echo "MCP_VERSION=$(date +'%Y.%m.%d')" >> $GITHUB_ENV
-        fi
-    - name: Checkout
-      uses: actions/checkout@v4
+        # Extract version from Cargo.toml
+        MCP_VERSION=$(grep '^version = ' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+        echo "MCP_VERSION=$MCP_VERSION" >> $GITHUB_ENV
+        echo "version=$MCP_VERSION" >> $GITHUB_OUTPUT
+        echo "Extracted version: $MCP_VERSION"
 
     - name: Install Rust target
       shell: pwsh

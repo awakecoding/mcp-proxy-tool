@@ -55,8 +55,10 @@ jobs:
         if ("${{ github.event_name }}" -eq "workflow_dispatch") {
           $inputTag = "${{ github.event.inputs.tag }}"
           if ([string]::IsNullOrWhiteSpace($inputTag)) {
-            $now = Get-Date
-            $version = $now.ToString('yyyy.M.d')
+            # Extract version from Cargo.toml
+            $cargoToml = Get-Content "Cargo.toml"
+            $versionLine = $cargoToml | Where-Object { $_ -match '^version = "(.+)"' }
+            $version = $matches[1]
             $tag = "v$version"
           } else {
             $tag = $inputTag
