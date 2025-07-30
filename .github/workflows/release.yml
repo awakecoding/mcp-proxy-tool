@@ -102,6 +102,10 @@ jobs:
             # Remove any existing file with the target name
             if (Test-Path "$stagingDir/$binaryName") { Remove-Item "$stagingDir/$binaryName" -Force }
             Copy-Item $artifactPath "$stagingDir/$binaryName"
+            # Ensure executable permissions on Unix platforms
+            if (-not $IsPlatformWindows) {
+              chmod +x "$stagingDir/$binaryName"
+            }
             $archiveName = "mcp-proxy-tool-$($platform.name)"
             if ($IsPlatformWindows) {
               # Zip only the .exe at the root of the zip
