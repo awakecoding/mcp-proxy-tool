@@ -15,6 +15,11 @@ on:
         required: false
         default: false
         type: boolean
+      draft:
+        description: 'Create a draft release (for testing, not public)'
+        required: false
+        default: false
+        type: boolean
 
 env:
   CARGO_TERM_COLOR: always
@@ -50,8 +55,10 @@ jobs:
         if ("${{ github.event_name }}" -eq "workflow_dispatch") {
           $inputTag = "${{ github.event.inputs.tag }}"
           if ([string]::IsNullOrWhiteSpace($inputTag)) {
-            $now = Get-Date
-            $version = $now.ToString('yyyy.M.d')
+            # Extract version from Cargo.toml
+            $cargoToml = Get-Content "Cargo.toml"
+            $versionLine = $cargoToml | Where-Object { $_ -match '^version = "(.+)"' }
+            $version = $matches[1]
             $tag = "v$version"
           } else {
             $tag = $inputTag
@@ -97,12 +104,20 @@ jobs:
             # Remove any existing file with the target name
             if (Test-Path "$stagingDir/$binaryName") { Remove-Item "$stagingDir/$binaryName" -Force }
             Copy-Item $artifactPath "$stagingDir/$binaryName"
+            # Ensure executable permissions on Unix platforms
+            if (-not $IsPlatformWindows) {
+              chmod +x "$stagingDir/$binaryName"
+            }
             $archiveName = "mcp-proxy-tool-$($platform.name)"
             if ($IsPlatformWindows) {
-              7z a "release/$archiveName.zip" "$stagingDir/*"
-            } else {
+              # Zip only the .exe at the root of the zip
               Push-Location $stagingDir
-              zip -r "../../release/$archiveName.zip" *
+              7z a "../../release/$archiveName.zip" "$binaryName"
+              Pop-Location
+            } else {
+              # Zip only the binary at the root of the zip
+              Push-Location $stagingDir
+              zip "../../release/$archiveName.zip" "$binaryName"
               Pop-Location
             }
             Write-Host "✓ Created release/$archiveName.zip (contains $binaryName)"
@@ -118,7 +133,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         # Download all artifacts to a single directory
-        mkdir release
+        New-Item -ItemType Directory -Path "release" -Force | Out-Null
         $artifacts = Get-ChildItem -Recurse -Path artifacts -Include *.zip
         foreach ($artifact in $artifacts) {
           Copy-Item $artifact.FullName release/
@@ -140,10 +155,13 @@ jobs:
         $tag = "${{ steps.tag.outputs.tag }}"
         $repo = $env:GITHUB_REPOSITORY
         $dryRun = "${{ github.event.inputs.dry-run }}" -eq "true"
+        $draft = "${{ github.event.inputs.draft }}" -eq "true"
 
         if ($dryRun) {
           Write-Host "[DRY RUN] Would create release with tag: $tag"
           Write-Host "[DRY RUN] Assets: $assets"
+          Write-Host "[DRY RUN] Draft: $draft"
         } else {
-          & gh release create $tag --repo $repo --title $tag $assets
+          $draftFlag = if ($draft) { "--draft" } else { "" }
+          & gh release create $tag --repo $repo --title $tag $draftFlag $assets
         }
