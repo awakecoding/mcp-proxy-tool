@@ -15,6 +15,11 @@ on:
         required: false
         default: false
         type: boolean
+      draft:
+        description: 'Create a draft release (for testing, not public)'
+        required: false
+        default: false
+        type: boolean
 
 env:
   CARGO_TERM_COLOR: always
@@ -99,10 +104,14 @@ jobs:
             Copy-Item $artifactPath "$stagingDir/$binaryName"
             $archiveName = "mcp-proxy-tool-$($platform.name)"
             if ($IsPlatformWindows) {
-              7z a "release/$archiveName.zip" "$stagingDir/*"
-            } else {
+              # Zip only the .exe at the root of the zip
               Push-Location $stagingDir
-              zip -r "../../release/$archiveName.zip" *
+              7z a "../../release/$archiveName.zip" "$binaryName"
+              Pop-Location
+            } else {
+              # Zip only the binary at the root of the zip
+              Push-Location $stagingDir
+              zip "../../release/$archiveName.zip" "$binaryName"
               Pop-Location
             }
             Write-Host "✓ Created release/$archiveName.zip (contains $binaryName)"
@@ -140,10 +149,13 @@ jobs:
         $tag = "${{ steps.tag.outputs.tag }}"
         $repo = $env:GITHUB_REPOSITORY
         $dryRun = "${{ github.event.inputs.dry-run }}" -eq "true"
+        $draft = "${{ github.event.inputs.draft }}" -eq "true"
 
         if ($dryRun) {
           Write-Host "[DRY RUN] Would create release with tag: $tag"
           Write-Host "[DRY RUN] Assets: $assets"
+          Write-Host "[DRY RUN] Draft: $draft"
         } else {
-          & gh release create $tag --repo $repo --title $tag $assets
+          $draftFlag = if ($draft) { "--draft" } else { "" }
+          & gh release create $tag --repo $repo --title $tag $draftFlag $assets
         }
