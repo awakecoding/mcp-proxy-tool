@@ -162,6 +162,9 @@ jobs:
           Write-Host "[DRY RUN] Assets: $assets"
           Write-Host "[DRY RUN] Draft: $draft"
         } else {
-          $draftFlag = if ($draft) { "--draft" } else { "" }
-          & gh release create $tag --repo $repo --title $tag $draftFlag $assets
+          if ($draft) {
+            & gh release create $tag --repo $repo --title $tag --draft $assets
+          } else {
+            & gh release create $tag --repo $repo --title $tag $assets
+          }
         }
