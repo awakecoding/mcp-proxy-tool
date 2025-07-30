@@ -1,0 +1,23 @@
+# Winget Package Manifest Template - Installer File
+#
+# This template creates the installer manifest for winget-pkgs repository
+# https://github.com/microsoft/winget-pkgs
+#
+# This defines the installer details including URLs and checksums
+
+PackageIdentifier: awakecoding.mcp-proxy-tool
+PackageVersion: {VERSION}
+InstallerType: zip
+NestedInstallerType: portable
+NestedInstallerFiles:
+- RelativeFilePath: mcp-proxy-tool.exe
+  PortableCommandAlias: mcp-proxy-tool
+Installers:
+- Architecture: x64
+  InstallerUrl: https://github.com/awakecoding/mcp-proxy-tool/releases/download/v{VERSION}/mcp-proxy-tool-windows-x64.zip
+  InstallerSha256: {SHA256_WINDOWS_X64}
+- Architecture: arm64
+  InstallerUrl: https://github.com/awakecoding/mcp-proxy-tool/releases/download/v{VERSION}/mcp-proxy-tool-windows-arm64.zip
+  InstallerSha256: {SHA256_WINDOWS_ARM64}
+ManifestType: installer
+ManifestVersion: 1.6.0

@@ -10,7 +10,10 @@ This directory contains templates and tools for distributing `mcp-proxy-tool` th
 - **Installation**: `brew install mcp-proxy-tool` (via custom tap)
 
 ### 📦 Winget (Windows)
-- **File**: `winget-manifest-template.yaml`
+- **Files**: 
+  - `winget-version-template.yaml` (version manifest)
+  - `winget-installer-template.yaml` (installer details)
+  - `winget-locale-template.yaml` (localization)
 - **Platforms**: Windows (ARM64/x64)
 - **Installation**: `winget install awakecoding.mcp-proxy-tool`
 
@@ -80,8 +83,8 @@ mcp-proxy-tool --help
 
 ### Winget Manifest
 ```bash
-# Validate manifest
-winget validate --manifest winget-manifest-template.yaml
+# Validate manifests (requires all 3 files in a directory)
+winget validate --manifest path/to/manifest/directory/
 ```
 
 ### Chocolatey Package

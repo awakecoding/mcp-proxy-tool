@@ -172,35 +172,56 @@ $homebrewOutput = Join-Path $OutputPath "mcp-proxy-tool.rb"
 $homebrewContent | Set-Content $homebrewOutput -Encoding UTF8
 Write-Host "  ✓ Generated: $homebrewOutput" -ForegroundColor Green
 
-# Generate Winget manifest
-Write-Host "🪟 Generating Winget manifest..." -ForegroundColor Magenta
-
-$wingetTemplate = Join-Path $PSScriptRoot "winget-manifest-template.yaml"
-if (-not (Test-Path $wingetTemplate)) {
-    Write-Error "Winget template not found: $wingetTemplate"
-    exit 1
-}
-
-$wingetContent = Get-Content $wingetTemplate -Raw
+# Generate Winget manifests (multi-file format)
+Write-Host "🪟 Generating Winget manifests..." -ForegroundColor Magenta
 
 # Get current date for release date
 $releaseDate = Get-Date -Format "yyyy-MM-dd"
 
-# Replace placeholders in Winget manifest
-$wingetContent = $wingetContent -replace 'PackageVersion: "\{VERSION\}"', "PackageVersion: `"$Version`""
-$wingetContent = $wingetContent -replace 'PackageVersion: "[^"]*" # Updated to current version from Cargo\.toml', "PackageVersion: `"$Version`""
-$wingetContent = $wingetContent -replace '/v[0-9.]+/', "/v$Version/"
-$wingetContent = $wingetContent -replace '\{SHA256_X64\}', $platformChecksums["windows-x64"]
-$wingetContent = $wingetContent -replace '\{SHA256_ARM64\}', $platformChecksums["windows-arm64"]
-$wingetContent = $wingetContent -replace '\{RELEASE_DATE\}', $releaseDate
-$wingetContent = $wingetContent -replace '"[0-9]{4}-[0-9]{2}-[0-9]{2}" # YYYY-MM-DD format.*', "`"$releaseDate`""
+# Generate version manifest
+$wingetVersionTemplate = Join-Path $PSScriptRoot "winget-version-template.yaml"
+if (-not (Test-Path $wingetVersionTemplate)) {
+    Write-Error "Winget version template not found: $wingetVersionTemplate"
+    exit 1
+}
 
-# Clean up any remaining placeholder comments
-$wingetContent = $wingetContent -replace ' # Replace with actual SHA256.*', ""
+$versionContent = Get-Content $wingetVersionTemplate -Raw
+$versionContent = $versionContent -replace '\{VERSION\}', $Version
 
-$wingetOutput = Join-Path $OutputPath "awakecoding.mcp-proxy-tool.yaml"
-$wingetContent | Set-Content $wingetOutput -Encoding UTF8
-Write-Host "  ✓ Generated: $wingetOutput" -ForegroundColor Green
+$versionOutput = Join-Path $OutputPath "awakecoding.mcp-proxy-tool.yaml"
+$versionContent | Set-Content $versionOutput -Encoding UTF8
+Write-Host "  ✓ Generated: $versionOutput" -ForegroundColor Green
+
+# Generate installer manifest
+$wingetInstallerTemplate = Join-Path $PSScriptRoot "winget-installer-template.yaml"
+if (-not (Test-Path $wingetInstallerTemplate)) {
+    Write-Error "Winget installer template not found: $wingetInstallerTemplate"
+    exit 1
+}
+
+$installerContent = Get-Content $wingetInstallerTemplate -Raw
+$installerContent = $installerContent -replace '\{VERSION\}', $Version
+$installerContent = $installerContent -replace '\{SHA256_WINDOWS_X64\}', $platformChecksums["windows-x64"]
+$installerContent = $installerContent -replace '\{SHA256_WINDOWS_ARM64\}', $platformChecksums["windows-arm64"]
+
+$installerOutput = Join-Path $OutputPath "awakecoding.mcp-proxy-tool.installer.yaml"
+$installerContent | Set-Content $installerOutput -Encoding UTF8
+Write-Host "  ✓ Generated: $installerOutput" -ForegroundColor Green
+
+# Generate locale manifest
+$wingetLocaleTemplate = Join-Path $PSScriptRoot "winget-locale-template.yaml"
+if (-not (Test-Path $wingetLocaleTemplate)) {
+    Write-Error "Winget locale template not found: $wingetLocaleTemplate"
+    exit 1
+}
+
+$localeContent = Get-Content $wingetLocaleTemplate -Raw
+$localeContent = $localeContent -replace '\{VERSION\}', $Version
+$localeContent = $localeContent -replace '\{RELEASE_DATE\}', $releaseDate
+
+$localeOutput = Join-Path $OutputPath "awakecoding.mcp-proxy-tool.locale.en-US.yaml"
+$localeContent | Set-Content $localeOutput -Encoding UTF8
+Write-Host "  ✓ Generated: $localeOutput" -ForegroundColor Green
 
 # Generate Chocolatey package
 Write-Host "🍫 Generating Chocolatey package..." -ForegroundColor Magenta
@@ -346,7 +367,12 @@ if ($SubmitWinget) {
     $wingetDir = Join-Path $OutputPath "winget-submission"
     $manifestDir = Join-Path $wingetDir "manifests/a/awakecoding/mcp-proxy-tool/$Version"
     New-Item -ItemType Directory -Path $manifestDir -Force | Out-Null
-    Copy-Item $wingetOutput (Join-Path $manifestDir "awakecoding.mcp-proxy-tool.yaml")
+    
+    # Copy all three manifest files
+    Copy-Item $versionOutput (Join-Path $manifestDir "awakecoding.mcp-proxy-tool.yaml")
+    Copy-Item $installerOutput (Join-Path $manifestDir "awakecoding.mcp-proxy-tool.installer.yaml")
+    Copy-Item $localeOutput (Join-Path $manifestDir "awakecoding.mcp-proxy-tool.locale.en-US.yaml")
+    
     Write-Host "  ✓ Winget submission ready in: $wingetDir" -ForegroundColor Green
 }
 

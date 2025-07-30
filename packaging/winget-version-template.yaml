@@ -1,0 +1,16 @@
+# Winget Package Manifest Template - Version File
+# 
+# This template creates the version manifest for winget-pkgs repository
+# https://github.com/microsoft/winget-pkgs
+#
+# This is part of the multi-file manifest format required for ManifestVersion 1.6.0+
+# Files needed:
+# - awakecoding.mcp-proxy-tool.yaml (this file)
+# - awakecoding.mcp-proxy-tool.installer.yaml 
+# - awakecoding.mcp-proxy-tool.locale.en-US.yaml
+
+PackageIdentifier: awakecoding.mcp-proxy-tool
+PackageVersion: {VERSION}
+DefaultLocale: en-US
+ManifestType: version
+ManifestVersion: 1.6.0
