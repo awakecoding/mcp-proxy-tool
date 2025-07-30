@@ -16,38 +16,53 @@ A high-performance MCP (Model Context Protocol) proxy tool written in Rust that 
 
 ## Installation
 
-### Pre-built Binaries
+### Package Managers (Recommended)
 
-Download the latest release for your platform from the [GitHub Releases](https://github.com/awakecoding/mcp-proxy-tool/releases) page.
+#### Cargo (Rust Package Manager)
+```bash
+cargo install mcp-proxy-tool
+```
 
 #### Windows
 
-**Option 1: Direct Download**
-1. Download `mcp-proxy-tool-windows-x64.zip` (Intel/AMD) or `mcp-proxy-tool-windows-arm64.zip` (ARM64)
-2. Extract the ZIP file
-3. Add the extracted directory to your PATH or run directly
+**Chocolatey** (under review - available soon)
+```powershell
+choco install mcp-proxy-tool
+```
 
-**Option 2: Winget (Coming Soon)**
+**Winget** (coming soon)
 ```powershell
 winget install awakecoding.mcp-proxy-tool
 ```
 
-#### macOS
+#### macOS & Linux
 
-**Option 1: Direct Download**
-1. Download `mcp-proxy-tool-macos-x64.zip` (Intel) or `mcp-proxy-tool-macos-arm64.zip` (Apple Silicon)
-2. Extract: `unzip mcp-proxy-tool-*.zip`
-3. Move to PATH: `sudo mv mcp-proxy-tool /usr/local/bin/`
-
-**Option 2: Homebrew (Coming Soon)**
+**Homebrew** (coming soon)
 ```bash
 brew tap awakecoding/tap
 brew install mcp-proxy-tool
 ```
 
+### Pre-built Binaries
+
+**📥 [Download from GitHub Releases](https://github.com/awakecoding/mcp-proxy-tool/releases/latest)**
+
+Download the latest release for your platform from the [GitHub Releases](https://github.com/awakecoding/mcp-proxy-tool/releases) page.
+
+#### Windows
+
+1. Download `mcp-proxy-tool-windows-x64.zip` (Intel/AMD) or `mcp-proxy-tool-windows-arm64.zip` (ARM64)
+2. Extract the ZIP file
+3. Add the extracted directory to your PATH or run directly
+
+#### macOS
+
+1. Download `mcp-proxy-tool-macos-x64.zip` (Intel) or `mcp-proxy-tool-macos-arm64.zip` (Apple Silicon)
+2. Extract: `unzip mcp-proxy-tool-*.zip`
+3. Move to PATH: `sudo mv mcp-proxy-tool /usr/local/bin/`
+
 #### Linux
 
-**Direct Download**
 1. Download `mcp-proxy-tool-linux-x64.zip` (x86_64) or `mcp-proxy-tool-linux-arm64.zip` (ARM64)
 2. Extract: `unzip mcp-proxy-tool-*.zip`
 3. Move to PATH: `sudo mv mcp-proxy-tool /usr/local/bin/`
@@ -63,12 +78,6 @@ cargo build --release
 ```
 
 The compiled binary will be available at `target/release/mcp-proxy-tool`.
-
-### From Cargo
-
-```bash
-cargo install mcp-proxy-tool
-```
 
 ## Usage
 

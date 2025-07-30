@@ -8,7 +8,7 @@ description = "Cross-platform MCP (Model Context Protocol) proxy tool"
 homepage = "https://github.com/awakecoding/mcp-proxy-tool"
 repository = "https://github.com/awakecoding/mcp-proxy-tool"
 readme = "README.md"
-keywords = ["mcp", "proxy", "cli", "model-context-protocol"]
+keywords = ["mcp", "proxy", "cli", "llm", "json-rpc"]
 categories = ["command-line-utilities", "network-programming"]
 
 [dependencies]
