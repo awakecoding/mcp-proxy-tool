@@ -118,7 +118,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         # Download all artifacts to a single directory
-        mkdir release
+        New-Item -ItemType Directory -Path "release" -Force | Out-Null
         $artifacts = Get-ChildItem -Recurse -Path artifacts -Include *.zip
         foreach ($artifact in $artifacts) {
           Copy-Item $artifact.FullName release/
