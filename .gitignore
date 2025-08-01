@@ -27,3 +27,6 @@ tests/logs/
 # Backup files
 *.bak
 *.orig
+
+bin/
+obj/
