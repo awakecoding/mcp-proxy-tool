@@ -89,8 +89,10 @@ jobs:
           $env:MACOSX_DEPLOYMENT_TARGET="10.13"
           echo "MACOSX_DEPLOYMENT_TARGET=10.13" >> $env:GITHUB_ENV
         } elseif ($IsWindows) {
-          # Windows-specific configuration
-          Write-Host "Configuring Windows environment"
+          # Windows-specific configuration - static MSVC runtime
+          Write-Host "Configuring Windows environment with static MSVC runtime"
+          $env:RUSTFLAGS="-C target-feature=+crt-static"
+          echo "RUSTFLAGS=-C target-feature=+crt-static" >> $env:GITHUB_ENV
         }
         Write-Host "Build environment configured for ${{ matrix.os }}"
 
@@ -172,6 +174,29 @@ jobs:
             $fileInfo = Get-Item $binaryPath
             Write-Host "Size: $($fileInfo.Length) bytes"
             Write-Host "Last modified: $($fileInfo.LastWriteTime)"
+            
+            Install-Module -Name VsDevShell -Force
+            Enter-VsDevShell
+            
+            # Check for static vs dynamic MSVC runtime linking
+            Write-Host "`nChecking MSVC runtime linkage:"
+            try {
+              # Use dumpbin to check dependencies (if available)
+              $dumpbinResult = & dumpbin /dependents $binaryPath 2>&1
+              if ($LASTEXITCODE -eq 0) {
+                $vcredistDlls = $dumpbinResult | Select-String -Pattern "(msvcr|vcruntime|msvcp|concrt|vcomp)" -AllMatches
+                if ($vcredistDlls) {
+                  Write-Host "❌ Dynamic MSVC runtime detected - dependencies:"
+                  $vcredistDlls | ForEach-Object { Write-Host "  $_" }
+                } else {
+                  Write-Host "✅ Static MSVC runtime - no VC runtime DLL dependencies found"
+                }
+              } else {
+                throw "dumpbin not available"
+              }
+            } catch {
+              Write-Host "Could not determine runtime linkage: $($_.Exception.Message)"
+            }
           } else {
             Write-Host "Binary not found at $binaryPath"
           }
